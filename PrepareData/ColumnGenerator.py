@@ -40,7 +40,7 @@ class ColumnGenerator():
 
 if __name__ == '__main__':
     import pandas as pd
-    from TimeWeightRatings.Main import *
+    from Ratings.Main import *
     Time = AllGamesGenerator()
 
     all_team = pd.read_pickle(local_file_path + "\\all_team").sort_values(by='rating',ascending=False)

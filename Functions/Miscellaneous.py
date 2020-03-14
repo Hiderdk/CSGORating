@@ -1,6 +1,28 @@
 import pandas as pd
 import datetime
 
+def get_start_rating(all_game_all_player=None,all_player=None,region=None,column_name=None):
+    start_rating_region = {'Europe': 1200, 'Africa': -900, 'Asia': 0,
+                           'North America': 950, 'South America': 0,
+                           'Middle East': 100, 'Oceania': -200, 'Brazil': 500,
+                           'unknown': 0}
+
+    region_level_rows = all_player[
+        (all_player['region'] == region)
+        & (all_player['is_rating_updated'] == 1)
+        ]
+
+    if len(region_level_rows) >= 90:
+        start_rating = region_level_rows.rating.quantile(0.24)
+    else:
+        start_rating = start_rating_region[region]
+
+
+    return start_rating
+
+
+
+
 def scale_features_and_insert_to_dataframe(scaled_data, unscaled_values):
     scaled_features = {}
 

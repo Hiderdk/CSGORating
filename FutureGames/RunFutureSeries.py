@@ -3,8 +3,8 @@ from SQL import *
 from Functions.Filters import *
 from Functions.SingleValue import *
 from Functions.Lists import *
-from TimeWeightRatings.SingleGame import SingleGameRatingGenerator
-from TimeWeightRatings.Main import AllGamesGenerator
+from Ratings.SingleGame import SingleGameRatingGenerator
+from Ratings.Main import AllGamesGenerator
 
 
 class SeriesPredictionGenerator():

@@ -1,8 +1,9 @@
-from TimeWeightRatings.SingleGame import SingleGameRatingGenerator
+from Ratings.SingleGame import SingleGameRatingGenerator
 from Functions.Miscellaneous import *
 from Killsprobabilities.BinaryKillScenarioGenerator import BinaryKillScenarioGenerator
 import scipy.stats as ss
-v = 3
+
+
 ot_probability = 0.08
 
 class KillsScenarioProbabilityGenerator():
@@ -140,7 +141,7 @@ if __name__ == '__main__':
     }
     AllGames.all_game_all_player = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\all_game_all_player_performance_rating")
     team_players = {
-        'Astralis':['Device','Dupreeh','Magisk','Xyp9x'],
+        'Astralis':['Device','Dupreeh','Magisk','Xyp9x','Gla1ve'],
         'Natus Vincere':['S1mple','Electronic','Perfecto','Bomblch','flamie'],
     }
 
