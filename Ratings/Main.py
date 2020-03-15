@@ -86,7 +86,7 @@ class AllGamesGenerator():
 
 
     def prepare_data(self):
-        self.all_player['time_weight_rating'] = None
+        self.all_player['time_weight_rating'] = ""
 
         self.all_game_all_player['rounds_difference'] = self.all_game_all_player['rounds_won'] - \
                                                         self.all_game_all_player['rounds_lost']
@@ -128,22 +128,22 @@ class AllGamesGenerator():
         self.all_game_all_team.to_pickle(local_file_path + "\\" + "all_game_all_team")
 
     def calculcate_rating_for_all_series(self,series_ids):
-        start_date_time = self.all_game_all_player.head(1)['start_date_time'].iloc[0]
-        print(self.all_game_all_player.head(1)['start_date_time'])
-        st = time.time()
-        for series_number, series_id in enumerate(series_ids):
 
+
+        for series_number, series_id in enumerate(series_ids):
+            st = time.time()
             single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
                                                                            "series_id")
+            start_date_time = single_series_all_player['start_date_time'].iloc[0]
             self.single_series(start_date_time,single_series_all_player)
             print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-st,3))
             post_series_single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
                                                                       "series_id")
             self.create_all_team(post_series_single_series_all_player)
-            if series_number % 50 == 0:
+            if series_number % 100 == 0:
 
-                vg =  self.all_player.sort_values(by='time_weight_rating', ascending=False)
-                print(vg[['player_id', 'time_weight_rating', 'player_name']].dropna().head(20))
+                vg =  self.all_player[self.all_player['time_weight_rating']!=''].sort_values(by='time_weight_rating', ascending=False)
+                print(vg[['time_weight_rating', 'time_weight_rating_certain_ratio','player_name']].dropna().head(20))
                 self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
                 vt = self.all_team.sort_values(by='time_weight_rating', ascending=False)
                 print(vt[['time_weight_rating', 'team_name']].dropna().head(20))
@@ -172,6 +172,9 @@ class AllGamesGenerator():
             team_time_weight_certain_ratios= []
             for player_id in player_ids:
                 player_number+=1
+                if player_number == 6:
+                    break
+
                 player_row = self.all_player[self.all_player['player_id']==player_id]
                 time_weight_rating = player_row['time_weight_rating'].iloc[0]
                 time_weight_rating_certain_ratio = player_row['time_weight_rating_certain_ratio'].iloc[0]
@@ -185,7 +188,7 @@ class AllGamesGenerator():
             self.all_team_dict['time_weight_rating'][index] = sum(team_time_weight_ratings)/len(team_time_weight_ratings)
             self.all_team_dict['time_weight_rating_certain_ratio'][index] = sum(team_time_weight_certain_ratios) / len(
                 team_time_weight_certain_ratios)
-            self.all_team_dict['time_weight_rating'][index] = start_date_time
+            self.all_team_dict['most_recent_date'][index] = start_date_time
 
     def single_series(self,start_date_time,single_series_all_player):
 
@@ -207,7 +210,8 @@ class AllGamesGenerator():
 
 
                 team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
-                SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self,update_dataframe=True,single_game_all_player=single_game_all_player)
+                SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self.all_game_all_player,self.all_player,
+                                                       update_dataframe=True,single_game_all_player=single_game_all_player)
 
                 self.all_game_all_player,self.all_player = SingleGame.calculcate_ratings()
 
@@ -218,7 +222,7 @@ class AllGamesGenerator():
 
 if __name__ == '__main__':
     newest_games_only =False
-    min_date = "2019-12-01"
+    min_date = "2019-07-01"
     AllGames = AllGamesGenerator()
 
     AllGames.main(newest_games_only,min_date)

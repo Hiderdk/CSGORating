@@ -10,11 +10,11 @@ from TimeWeight.timeweightconfigurations import *
 class SingleGameRatingGenerator():
 
 
-    def __init__(self,team_ids,team_player_ids,start_date_time,AllGames,update_dataframe=False,single_game_all_player=None):
+    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,update_dataframe=False,single_game_all_player=None):
         self.update_dataframe = update_dataframe
         self.single_game_all_player = single_game_all_player
-        self.all_game_all_player = AllGames.all_game_all_player
-        self.all_player = AllGames.all_player
+        self.all_game_all_player =all_game_all_player
+        self.all_player =all_player
         self.team_ids = team_ids
         self.team_player_ids = team_player_ids
         self.start_date_time = start_date_time
@@ -58,14 +58,14 @@ class SingleGameRatingGenerator():
 
 
     def single_player(self,player_id,team_id):
-        player_region = get_single_value_based_on_other_column_value(self.all_player, player_id,
-                                                                          "player_id",
-                                                                          "region")
+
         all_game_single_player = get_rows_where_column_equal_to(self.all_game_all_player,
                                                                      player_id,
                                                                      "player_id")
         updated_game_single_player = \
             get_rows_where_column_equal_to(all_game_single_player, 1, "is_rating_updated")
+        if len(updated_game_single_player) >=3:
+            h = 3
 
         if self.player_is_new(updated_game_single_player) is True:
 
@@ -142,20 +142,25 @@ class SingleGameRatingGenerator():
         else:
             start_rating = start_rating_region[region]
 
-        updated_all_game_all_player = self.all_game_all_player[self.all_game_all_player['is_rating_updated']==1]
-        equal_to_rows = get_rows_where_column_equal_to( updated_all_game_all_player , region ,"region")
-        min_date = self.start_date_time- pd.DateOffset(months=6)
-        equal_to_rows_date = get_rows_where_column_larger_than(equal_to_rows,min_date,"start_date_time")
-        active_players_region = get_number_of_unique_values(         equal_to_rows_date,"player_id")
+        #updated_all_game_all_player = self.all_game_all_player[self.all_game_all_player['is_rating_updated']==1]
+       # equal_to_rows = get_rows_where_column_equal_to( updated_all_game_all_player , region ,"region")
+       # min_date = self.start_date_time- pd.DateOffset(months=6)
+        #equal_to_rows_date = get_rows_where_column_larger_than(equal_to_rows,min_date,"start_date_time")
+        #active_players_region = get_number_of_unique_values(         equal_to_rows_date,"player_id")
 
-        if active_players_region > 25:
+        region_level_rows = self.all_player[
+            ( self.all_player['region'] == region)
+            & ( self.all_player['time_weight_rating'] !="")
+            ]
 
-            if region == 'Europe': start_rating = start_rating_region[region] - (
-                        active_players_region ** 0.52) * 37
-            if region != 'Europe': start_rating = start_rating_region[region] - (
-                        active_players_region ** 0.57) * 48
+        if len(region_level_rows) >= 90:
+            start_rating = region_level_rows.time_weight_rating.quantile(0.1)
+        else:
+            start_rating = start_rating_region[region]
+
         if  self.get_it_player_is_female_or_staff(team_name) is True:
             start_rating -= 2500
+
 
         return start_rating
 
@@ -182,6 +187,8 @@ class SingleGameRatingGenerator():
             self.single_game_stored_player_values[player_id]['time_weight_rating_certain_ratio']
         self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weight_rating'] = \
         self.single_game_stored_player_values[player_id]['time_weight_rating']
+        self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weighted_opponent_adjusted_kpr'] = \
+            self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
 
     def update_player_opponent_data(self):
         game_id = self.single_game_all_player['game_id'].iloc[0]
@@ -208,8 +215,7 @@ class SingleGameRatingGenerator():
                 single_game_indexes, "opponent_adjusted_performance_rating"] = opponent_adjusted_performance_ratings
         self.all_game_all_player['net_opponent_adjusted_performance_rating'] = \
             self.all_game_all_player[ 'opponent_adjusted_performance_rating'] - self.all_game_all_player['rating']
-        single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id'] == game_id]
-        h = 3
+
 
 
     def calculcate_opponent_adjusted_kpr(self,single_game_all_player):

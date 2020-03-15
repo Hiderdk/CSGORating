@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 import datetime
+
+from Functions.Filters import *
+
 def get_rows_where_column_between(df,min_value,max_value,column_name):
     new_df = df[df[column_name].between(min_value,max_value)]
 
@@ -18,7 +21,9 @@ class TimeWeightGenerator():
 
     def main(self):
         self.min_date_time =  self.current_date_time - datetime.timedelta(days=self.min_days_ago)
-        self.new_df =  get_rows_where_column_between(self.df,        self.min_date_time,self.current_date_time, "start_date_time")
+        if len(self.df) >=3:
+            h = 3
+        self.new_df =  get_rows_where_column_larger_than(self.df,   self.min_date_time, "start_date_time")
         if len(self.new_df) >=1:
             if 'weight_multiplier' in self.rating_methods:
                 weight_column = self.rating_methods['weight_multiplier']
