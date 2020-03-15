@@ -9,11 +9,11 @@ def get_start_rating(all_game_all_player=None,all_player=None,region=None,column
 
     region_level_rows = all_player[
         (all_player['region'] == region)
-        & (all_player['is_rating_updated'] == 1)
+        & (all_player['time_weight_rating'] !=None)
         ]
 
     if len(region_level_rows) >= 90:
-        start_rating = region_level_rows.rating.quantile(0.24)
+        start_rating = region_level_rows.time_weight_rating.quantile(0.1)
     else:
         start_rating = start_rating_region[region]
 

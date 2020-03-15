@@ -3,7 +3,7 @@ from settings import *
 from Functions.Lists import *
 from Functions.Miscellaneous import *
 from Ratings.PerformanceRating import *
-from Ratings.SingleSeries import SingleSeriesRating
+from Ratings.SingleGame import SingleGameRatingGenerator
 from Functions.ChangeDataFrame import *
 from aws import *
 from Ratings.PlayerRoundWins import PlayerRoundWinsGenerator
@@ -56,6 +56,7 @@ class AllGamesGenerator():
         self.all_player = get_player()
 
 
+
     def load_newest_games_only(self):
         self.previous_all_game_all_player = pd.read_pickle(local_file_path + "\\" + "all_game_all_player_performance_rating")
         #self.previous_all_game_all_player = self.previous_all_game_all_player[self.previous_all_game_all_player['start_date_time']<'2019-03-15']
@@ -69,7 +70,7 @@ class AllGamesGenerator():
 
 
     def prepare_data(self):
-
+        self.all_player['time_weight_rating'] = None
 
         self.all_game_all_player['rounds_difference'] = self.all_game_all_player['rounds_won'] - \
                                                         self.all_game_all_player['rounds_lost']
@@ -78,6 +79,8 @@ class AllGamesGenerator():
         self.all_game_all_player['is_rating_updated'] = 0
         self.all_game_all_player = add_game_player_simple_ratings(self.all_game_all_player)
         self.all_game_all_player['predicted_adr'] = calculcate_predicted_adr(self.all_game_all_player)
+        self.all_game_all_player['rating'] = calculcate_predicted_adr(self.all_game_all_player)
+        self.all_game_all_player['opponent_adjusted_kpr'] = calculcate_predicted_adr(self.all_game_all_player)
         self.all_game_all_player['net_adr'] = self.all_game_all_player['adr']-self.all_game_all_player['predicted_adr']
         self.all_game_all_player['net_adr'] = self.all_game_all_player['net_adr'].fillna(0)
 
@@ -109,12 +112,12 @@ class AllGamesGenerator():
         self.all_game_all_team.to_pickle(local_file_path + "\\" + "all_game_all_team")
 
     def calculcate_rating_for_all_series(self,series_ids):
-
+        start_date_time = self.all_game_all_player.head(1)['start_date_time'].iloc[0]
         print(self.all_game_all_player.head(1)['start_date_time'])
         for series_number, series_id in enumerate(series_ids):
-            start_date_time = time.time()
 
-            self.single_series(series_id)
+
+            self.single_series(start_date_time,series_id)
             print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-start_date_time,3))
 
             if series_number % 50 == 0:
@@ -133,28 +136,31 @@ class AllGamesGenerator():
 
         for  game_number in game_numbers:
 
-            single_game_all_player = get_rows_where_column_equal_to(self.all_game_all_player, game_number,
+            single_game_all_player = get_rows_where_column_equal_to(self.single_series_all_player, game_number,
                                                                          "game_number")
             print("Date", start_date_time)
-            first_row = self.single_game_all_player.head(1)
+            first_row = single_game_all_player.head(1)
             self.game_id = first_row['game_id'].iloc[0]
 
-            team_ids = get_number_of_unique_values(self.single_game_all_player,"team_id")
 
-            if team_ids == 2:
+            team_ids = single_game_all_player['team_id'].unique().tolist()
 
-                self.team_player_ids = get_team_player_dictionary(self.single_game_all_player, "team_id", "player_id")
-                self.team_ids = get_unique_values_from_column_in_list_format(self.single_game_all_player, "team_id")
-                SingleGame = SingleGameRatingGenerator(self.team_ids,self.team_player_ids,self.start_date_time)
-                try:
-                    SingleGame.main(AllGames)
-                    AllGames = SingleGame.update_ratings_to_all_games(AllGames)
-                except Exception:
-                    print("Erro game_id", self.game_id)
+            if len(team_ids) == 2:
+
+
+                team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
+                SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self,update_dataframe=True,single_game_all_player=single_game_all_player)
+
+                self.all_game_all_player,self.all_player,self.all_team = SingleGame.calculcate_ratings()
+
+
+
+
+
 
 if __name__ == '__main__':
     newest_games_only =False
-    min_date = "2015-01-01"
+    min_date = "2019-12-01"
     AllGames = AllGamesGenerator()
 
     AllGames.main(newest_games_only,min_date)
