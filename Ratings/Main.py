@@ -12,7 +12,24 @@ import time
 class AllGamesGenerator():
 
     def __init__(self):
-        pass
+        self.all_team_dict = {
+            'team_id':[],
+            'team_name':[],
+            'most_recent_date':[],
+            'time_weight_rating':[],
+            'time_weight_rating_certain_ratio':[],
+            'player1_name':[],
+            'player1_rating': [],
+            'player2_name': [],
+            'player2_rating': [],
+            'player3_name': [],
+            'player3_rating': [],
+            'player4_name': [],
+            'player4_rating': [],
+            'player5_name': [],
+            'player5_rating': [],
+        }
+
 
     def main(self,newest_games_only,min_date):
         self.newest_games_only = newest_games_only
@@ -52,7 +69,6 @@ class AllGamesGenerator():
 
     def load_data_from_sql(self):
         self.all_game_all_player = get_all_time_game_player_data(self.min_date)
-        self.all_team = get_team()
         self.all_player = get_player()
 
 
@@ -114,29 +130,71 @@ class AllGamesGenerator():
     def calculcate_rating_for_all_series(self,series_ids):
         start_date_time = self.all_game_all_player.head(1)['start_date_time'].iloc[0]
         print(self.all_game_all_player.head(1)['start_date_time'])
+        st = time.time()
         for series_number, series_id in enumerate(series_ids):
 
-
-            self.single_series(start_date_time,series_id)
-            print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-start_date_time,3))
-
+            single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
+                                                                           "series_id")
+            self.single_series(start_date_time,single_series_all_player)
+            print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-st,3))
+            post_series_single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
+                                                                      "series_id")
+            self.create_all_team(post_series_single_series_all_player)
             if series_number % 50 == 0:
 
-                vg =  self.all_player.sort_values(by='rating', ascending=False)
-                print(vg[['player_id', 'rating', 'player_name']].dropna().head(20))
-                vt = self.all_team.sort_values(by='rating', ascending=False)
-                print(vt[['rating', 'team_name']].dropna().head(20))
+                vg =  self.all_player.sort_values(by='time_weight_rating', ascending=False)
+                print(vg[['player_id', 'time_weight_rating', 'player_name']].dropna().head(20))
+                self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
+                vt = self.all_team.sort_values(by='time_weight_rating', ascending=False)
+                print(vt[['time_weight_rating', 'team_name']].dropna().head(20))
                 self.insert_files()
 
 
-    def single_series(self,start_date_time,series_id):
+    def create_all_team(self,single_series_all_player):
+        team_ids = single_series_all_player['team_id'].unique().tolist()
+        start_date_time = single_series_all_player['start_date_time'].iloc[0]
+        for team_id in team_ids:
+            team_name = single_series_all_player[single_series_all_player['team_id']==team_id]['team_name'].iloc[0]
+            if team_id not in self.all_team_dict['team_name']:
+                for column in self.all_team_dict:
+                    if column == 'team_id':
+                        self.all_team_dict['team_id'].append(team_id)
+                    elif column == "team_name":
+                        self.all_team_dict['team_name'].append(team_name)
+                    else:
+                        self.all_team_dict[column].append(None)
+            index = self.all_team_dict['team_id'].index(team_id)
 
-        self.single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player,series_id,"series_id")
-        game_numbers = self.single_series_all_player['game_number'].unique().tolist()
+
+            player_ids = single_series_all_player[single_series_all_player['team_id']==team_id]['player_id'].unique().tolist()
+            player_number = 0
+            team_time_weight_ratings = []
+            team_time_weight_certain_ratios= []
+            for player_id in player_ids:
+                player_number+=1
+                player_row = self.all_player[self.all_player['player_id']==player_id]
+                time_weight_rating = player_row['time_weight_rating'].iloc[0]
+                time_weight_rating_certain_ratio = player_row['time_weight_rating_certain_ratio'].iloc[0]
+                player_name = player_row['player_name'].iloc[0]
+                self.all_team_dict['player' +str(player_number) + '_name'][index] = player_name
+                self.all_team_dict['player' + str(player_number) + '_rating'][index] = time_weight_rating
+                team_time_weight_certain_ratios.append(time_weight_rating_certain_ratio)
+                team_time_weight_ratings.append(time_weight_rating)
+
+
+            self.all_team_dict['time_weight_rating'][index] = sum(team_time_weight_ratings)/len(team_time_weight_ratings)
+            self.all_team_dict['time_weight_rating_certain_ratio'][index] = sum(team_time_weight_certain_ratios) / len(
+                team_time_weight_certain_ratios)
+            self.all_team_dict['time_weight_rating'][index] = start_date_time
+
+    def single_series(self,start_date_time,single_series_all_player):
+
+
+        game_numbers = single_series_all_player['game_number'].unique().tolist()
 
         for  game_number in game_numbers:
 
-            single_game_all_player = get_rows_where_column_equal_to(self.single_series_all_player, game_number,
+            single_game_all_player = get_rows_where_column_equal_to(single_series_all_player, game_number,
                                                                          "game_number")
             print("Date", start_date_time)
             first_row = single_game_all_player.head(1)
@@ -151,7 +209,7 @@ class AllGamesGenerator():
                 team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
                 SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self,update_dataframe=True,single_game_all_player=single_game_all_player)
 
-                self.all_game_all_player,self.all_player,self.all_team = SingleGame.calculcate_ratings()
+                self.all_game_all_player,self.all_player = SingleGame.calculcate_ratings()
 
 
 

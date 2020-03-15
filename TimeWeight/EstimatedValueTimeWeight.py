@@ -44,7 +44,7 @@ class EstimatedValueGenerator():
         if games_played == 0:
             return 0
 
-        games_played_ratio = (1 / (1 + 10 ** (-games_played / self.games_played_div_factor)) - 0.5) * 2
+        games_played_ratio = (1 / (1 + 10 ** (-games_played / self.rating_method['games_played_div_factor'])) - 0.5) * 2
         sum_date_ratio = sum(days_ago)
         recency_cv = (1 / (1 + 10 ** (- sum_date_ratio / recency_div_factor)) - 0.5) * 2
 

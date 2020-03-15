@@ -32,7 +32,6 @@ player_time_weight_methods = {
         'parameter': 1.3,
         'max_days_ago': 500,
         'hardcoded_backup_value':0.68,
-        'weight_multiplier': 'team_kills_weight_ratio',
         "games_played_weight": 0.2,
         'games_played_div_factor': 40,
     },

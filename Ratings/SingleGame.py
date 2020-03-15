@@ -14,7 +14,6 @@ class SingleGameRatingGenerator():
         self.update_dataframe = update_dataframe
         self.single_game_all_player = single_game_all_player
         self.all_game_all_player = AllGames.all_game_all_player
-        self.all_team = AllGames.all_team
         self.all_player = AllGames.all_player
         self.team_ids = team_ids
         self.team_player_ids = team_player_ids
@@ -29,16 +28,19 @@ class SingleGameRatingGenerator():
 
     def get_team_regions(self):
         for team_id,player_ids in    self.team_player_ids.items():
+            single_team_all_player = get_rows_where_is_in(self.all_player, player_ids,
+                                                                                    "player_id")
 
-
-            try: self.team_regions[team_id] = get_most_frequent_column_name( self.single_game_single_team_all_player[team_id] ,"region")
+            try: self.team_regions[team_id] = get_most_frequent_column_name( single_team_all_player ,"region")
             except ValueError: self.team_ratings[team_id] = "unknown"
 
 
     def calculcate_ratings(self):
+
         self.get_team_regions()
         for team_id,player_ids in    self.team_player_ids.items():
-            self.single_game_single_team_all_player[team_id] = get_rows_where_is_in(self.all_player, player_ids, "player_id")
+
+
             self.player_ratings[team_id] = []
             self.team_ratings[team_id] = 0
 
@@ -48,14 +50,11 @@ class SingleGameRatingGenerator():
                 self.single_player(player_id,team_id)
 
         if self.update_dataframe is True:
-            single_game_indexes = self.single_game_all_player.index.tolist()
-            opponent_adjusted_kpr = self.calculcate_opponent_adjusted_kpr(self.single_game_all_player)
-            opponent_adjusted_performance_ratings = self.calculcate_opponent_adjusted_performance_ratings(
-                    self.single_game_all_player)
+            self.update_player_opponent_data()
 
 
 
-        return self.all_game_all_player,self.all_player,self.all_team
+        return self.all_game_all_player,self.all_player
 
 
     def single_player(self,player_id,team_id):
@@ -83,8 +82,8 @@ class SingleGameRatingGenerator():
             EstimatedValueObject = EstimatedValueGenerator(rating_method,updated_game_single_player, backup_value, self.start_date_time,column_name)
             time_estimated_value = EstimatedValueObject.get_estimated_value()
             self.single_game_stored_player_values[player_id][time_weight_name] = time_estimated_value
-            self.single_game_stored_player_values[player_id][time_weight_name + 'certain_ratio'] = EstimatedValueObject.stored_values['certain_ratio']
-            self.single_game_stored_player_values[player_id][time_weight_name + 'weighted_rating'] = \
+            self.single_game_stored_player_values[player_id][time_weight_name + '_certain_ratio'] = EstimatedValueObject.stored_values['certain_ratio']
+            self.single_game_stored_player_values[player_id][time_weight_name + '_weighted_rating'] = \
             EstimatedValueObject.stored_values['weighted_rating']
 
             self.player_ratings[team_id].append(time_estimated_value)
@@ -92,7 +91,11 @@ class SingleGameRatingGenerator():
 
             if self.update_dataframe is True:
                 player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
-                self.update_single_game_single_player(time_weight_name,EstimatedValueObject.stored_values,player_index)
+                self.update_single_game_single_player(time_weight_name, EstimatedValueObject.stored_values,
+                                                      player_index)
+        if self.update_dataframe is True:
+
+            self.update_all_player(player_id)
 
 
 
@@ -123,8 +126,7 @@ class SingleGameRatingGenerator():
             return False
 
     def calculcate_start_rating(self, team_id):
-        team_name = get_single_value_based_on_other_column_value(self.all_team, team_id, "team_id",
-                                                                 "team_name")
+        team_name = self.single_game_all_player[self.single_game_all_player['team_id']==team_id]['team_name'].iloc[0]
         if team_id in self.team_regions:
             region = self.team_regions[team_id]
         else:
@@ -174,44 +176,56 @@ class SingleGameRatingGenerator():
                 column_name = time_weight_name + '_' + ratio
             self.all_game_all_player.at[index,column_name] = value
 
+    def update_all_player(self,player_id):
+
+        self.all_player.loc[self.all_player['player_id']==player_id,'time_weight_rating_certain_ratio'] = \
+            self.single_game_stored_player_values[player_id]['time_weight_rating_certain_ratio']
+        self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weight_rating'] = \
+        self.single_game_stored_player_values[player_id]['time_weight_rating']
 
     def update_player_opponent_data(self):
-
+        game_id = self.single_game_all_player['game_id'].iloc[0]
+        single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id'] == game_id]
+        single_game_indexes = single_game_all_player.index.tolist()
         team_number = -1
         for team_id, player_ids in self.team_player_ids.items():
+            single_game_single_team_all_player = single_game_all_player[single_game_all_player['team_id']==team_id]
             team_number+=1
-            single_game_team_indexes = self.single_game_single_team_all_player[
-               team_id].index.tolist()
+            single_game_team_indexes = single_game_single_team_all_player.index.tolist()
             opponent_team_id = self.team_ids[-team_number + 1]
             self.all_game_all_player.at[single_game_team_indexes,'opponent_region'] =   self.team_regions[opponent_team_id]
-            self.all_game_all_player.at[self.single_game_single_team_all_player[team_id] , 'opponent_time_weight_rating'] = \
+
+            self.all_game_all_player.at[single_game_team_indexes, 'opponent_time_weight_rating'] = \
                 self.team_ratings[opponent_team_id]
 
-            opponent_adjusted_performance_ratings = self.calculcate_opponent_adjusted_performance_ratings()
+        game_id = self.single_game_all_player['game_id'].iloc[0]
+        updated_single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id']==game_id]
+        opponent_adjusted_performance_ratings = self.calculcate_opponent_adjusted_performance_ratings(updated_single_game_all_player)
+        opponent_adjusted_kpr = self.calculcate_opponent_adjusted_kpr(updated_single_game_all_player)
+        self.all_game_all_player.at[
+            single_game_indexes, "opponent_adjusted_kpr"] = opponent_adjusted_kpr
+        self.all_game_all_player.at[
+                single_game_indexes, "opponent_adjusted_performance_rating"] = opponent_adjusted_performance_ratings
+        self.all_game_all_player['net_opponent_adjusted_performance_rating'] = \
+            self.all_game_all_player[ 'opponent_adjusted_performance_rating'] - self.all_game_all_player['rating']
+        single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id'] == game_id]
+        h = 3
 
-            self.all_game_all_player.at[
-                self.single_game_indexes, "opponent_adjusted_performance_rating"] = opponent_adjusted_performance_ratings
-            self.all_game_all_player['net_opponent_adjusted_performance_rating'] = self.all_game_all_player[
-                                                                                       'opponent_adjusted_performance_rating'] - \
-                                                                                   self.all_game_all_player[
-                                                                                       'rating']
 
-
-
-    def calculcate_opponent_adjusted_kpr(self):
+    def calculcate_opponent_adjusted_kpr(self,single_game_all_player):
         standard_rating = 1500
         factor = 0.00001
-        return self.single_game_all_player['kpr'] + (self.single_game_all_player['rating'] - standard_rating) * factor
+        return single_game_all_player['kpr'] + (single_game_all_player['opponent_time_weight_rating'] - standard_rating) * factor
 
-    def calculcate_opponent_adjusted_performance_ratings(self):
+    def calculcate_opponent_adjusted_performance_ratings(self,single_game_all_player):
         performance_multiplier = 18500
 
-        net_performance_ratings = self.single_game_all_player["normalized_player_round_win_percentage"].astype(
+        net_performance_ratings = single_game_all_player["normalized_player_round_win_percentage"].astype(
             'float64') + 0.4
         # single_game_rows =  all_game_all_player.iloc[ self.single_game_indexes]
 
         return np.log((net_performance_ratings) / (1 - (net_performance_ratings))) * performance_multiplier + \
-               self.single_game_all_player['opponent_team_rating']
+               single_game_all_player['opponent_time_weight_rating']
 
 
 
