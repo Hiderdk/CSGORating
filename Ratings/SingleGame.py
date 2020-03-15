@@ -45,7 +45,7 @@ class SingleGameRatingGenerator():
             self.team_ratings[team_id] = 0
 
 
-            for player_id in player_ids:
+            for player_id in self.team_player_ids[team_id]:
                 self.single_game_stored_player_values[player_id] = {}
                 self.single_player(player_id,team_id)
 
@@ -64,8 +64,6 @@ class SingleGameRatingGenerator():
                                                                      "player_id")
         updated_game_single_player = \
             get_rows_where_column_equal_to(all_game_single_player, 1, "is_rating_updated")
-        if len(updated_game_single_player) >=3:
-            h = 3
 
         if self.player_is_new(updated_game_single_player) is True:
 
@@ -86,8 +84,9 @@ class SingleGameRatingGenerator():
             self.single_game_stored_player_values[player_id][time_weight_name + '_weighted_rating'] = \
             EstimatedValueObject.stored_values['weighted_rating']
 
-            self.player_ratings[team_id].append(time_estimated_value)
-            self.team_ratings[team_id] += time_estimated_value / len(self.team_player_ids[team_id])
+            if time_weight_name == "time_weight_rating":
+                self.player_ratings[team_id].append(time_estimated_value)
+                self.team_ratings[team_id] += time_estimated_value / len(self.team_player_ids[team_id])
 
             if self.update_dataframe is True:
                 player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
@@ -151,6 +150,7 @@ class SingleGameRatingGenerator():
         region_level_rows = self.all_player[
             ( self.all_player['region'] == region)
             & ( self.all_player['time_weight_rating'] !="")
+            & (self.all_player['time_weight_rating_certain_ratio'] >0.18)
             ]
 
         if len(region_level_rows) >= 90:
@@ -158,8 +158,12 @@ class SingleGameRatingGenerator():
         else:
             start_rating = start_rating_region[region]
 
+        if start_rating < -2000:
+            print(start_rating, region, len(region_level_rows))
+
         if  self.get_it_player_is_female_or_staff(team_name) is True:
             start_rating -= 2500
+
 
 
         return start_rating
@@ -175,7 +179,7 @@ class SingleGameRatingGenerator():
     def update_single_game_single_player(self,time_weight_name,stored_values,index):
         self.all_game_all_player.at[index,'is_rating_updated'] = 1
         for ratio,value in stored_values.items():
-            if ratio == 'ratio':
+            if ratio == 'rating':
                 column_name = time_weight_name
             else:
                 column_name = time_weight_name + '_' + ratio

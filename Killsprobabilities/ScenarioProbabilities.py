@@ -60,7 +60,7 @@ class KillsScenarioProbabilityGenerator():
             for team_kill,team_kill_probability in team_kill_probabilities.items():
 
                 for player in self.team_players[team]:
-                    estimated_player_kill_percentage = expected_player_kill_percentages[player]
+                    estimated_player_kill_percentage = self.expected_player_kill_percentages[player]
 
                     BinaryKillScenario.create_scenario_probabilities_for_single_player_single_team_kill \
                                 (team,player, estimated_player_kill_percentage, team_kill, team_kill_probability)
@@ -105,7 +105,7 @@ class KillsScenarioProbabilityGenerator():
             'Line':[]
         }
         for kill in range(13,25):
-           google_sheet_player_kill_over_dict['Line'].append("Over" + str(kill+0.5))
+           google_sheet_player_kill_over_dict['Line'].append("Over " + str(kill+0.5))
 
         for team in self.team_players:
             for player in self.team_players[team]:
@@ -115,7 +115,8 @@ class KillsScenarioProbabilityGenerator():
                 for kill in range(13, 25):
                     rows = player_df[player_df['player_kills']>kill]
                     sum = rows['scenario_probability'].sum()
-                    google_sheet_player_kill_over_dict[player].append(sum)
+                    percentage_prob = str(round(sum*100,0)) + "%"
+                    google_sheet_player_kill_over_dict[player].append(percentage_prob)
 
         return  pd.DataFrame.from_dict(google_sheet_player_kill_over_dict)
 

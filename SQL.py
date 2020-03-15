@@ -18,10 +18,12 @@ def create_in_numbers(ids):
 
 def get_all_from_series_player(min_date):
     sql = """
-    select sp.series_id,player_id,sp.team_id,team_id_opponent, s.start_date_time
+    select te.name as team_name,sp.series_id,player_id,sp.team_id,team_id_opponent, s.start_date_time,t.is_offline,t.prize_pool
      from series_player sp
     join series s on s.id = sp.series_id
     join series_team st on st.series_id = sp.series_id and sp.team_id = st.team_id
+    join team te on te.id = st.team_id
+    join tournament t on t.id = s.tournament_id
     where s.start_date_time > %s
     """
     return pd.read_sql(sql,conn,params=[min_date])

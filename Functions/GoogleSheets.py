@@ -35,15 +35,15 @@ def read_google_sheet(sheet_name,workbook_name):
     df = pd.DataFrame(data, columns=headers)
     return df
 
-def append_df_to_sheet(df,sheet_name,workbook_name):
+def append_df_to_sheet(df,sheet_name,workbook_name,row_number=1,column_number=1):
 
     file = gspread.authorize(credentials)
     sheet = file.open(workbook_name).worksheet(sheet_name)
 
-    df = df.round(2)
+
 
     #clear_sheet(sheet)
-    gd.set_with_dataframe(sheet,df,row=1,col=1 )
+    gd.set_with_dataframe(sheet,df,row=row_number,col=column_number )
 
 def clear_sheet(sheet_name,workbook_name):
     file = gspread.authorize(credentials)

@@ -60,11 +60,13 @@ class AllGamesGenerator():
         self.create_game_team(self.all_game_all_player)
 
 
-    def insert_files(self):
+    def insert_files(self,extra_name=""):
         insert_df = self.all_game_all_player[np.isfinite(self.all_game_all_player['rating'])]
-        insert_df.to_pickle(local_file_path +"\\" + "all_game_all_player_performance_rating")
-        self.all_player.to_pickle(local_file_path +"\\" + "all_player")
-        self.all_team.to_pickle(local_file_path +"\\" + "all_team")
+        insert_df.to_pickle(local_file_path +"\\" + extra_name + "all_game_all_player_rating")
+        self.all_player.to_pickle(local_file_path +"\\" + extra_name + "all_player")
+        self.all_team.to_pickle(local_file_path +"\\" + extra_name + "all_team")
+        all_game_all_team = self.create_game_team(self.all_game_all_player)
+        all_game_all_team.to_pickle(local_file_path +"\\" + extra_name + "all_game_all_team_rating")
         print("Updated file")
 
     def load_data_from_sql(self):
@@ -87,6 +89,7 @@ class AllGamesGenerator():
 
     def prepare_data(self):
         self.all_player['time_weight_rating'] = ""
+        self.all_player['time_weight_rating_certain_ratio'] = 0
 
         self.all_game_all_player['rounds_difference'] = self.all_game_all_player['rounds_won'] - \
                                                         self.all_game_all_player['rounds_lost']
@@ -122,10 +125,11 @@ class AllGamesGenerator():
         self.all_game_all_player = PlayerRoundWins.new_df
 
     def create_game_team(self,all_game_all_player):
-        self.all_game_all_team = all_game_all_player.groupby(['team_id','game_id','start_date_time','game_number'])[['rating','opponent_adjusted_performance_rating','certain_ratio']].mean().reset_index()
+        self.all_game_all_team = all_game_all_player.groupby(['team_id','game_id','start_date_time','game_number'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
-        self.all_game_all_team.to_pickle(local_file_path + "\\" + "all_game_all_team")
+        return self.all_game_all_team
+
 
     def calculcate_rating_for_all_series(self,series_ids):
 
@@ -147,7 +151,7 @@ class AllGamesGenerator():
                 self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
                 vt = self.all_team.sort_values(by='time_weight_rating', ascending=False)
                 print(vt[['time_weight_rating', 'team_name']].dropna().head(20))
-                self.insert_files()
+                self.insert_files("process_")
 
 
     def create_all_team(self,single_series_all_player):
@@ -155,7 +159,7 @@ class AllGamesGenerator():
         start_date_time = single_series_all_player['start_date_time'].iloc[0]
         for team_id in team_ids:
             team_name = single_series_all_player[single_series_all_player['team_id']==team_id]['team_name'].iloc[0]
-            if team_id not in self.all_team_dict['team_name']:
+            if team_id not in self.all_team_dict['team_id']:
                 for column in self.all_team_dict:
                     if column == 'team_id':
                         self.all_team_dict['team_id'].append(team_id)
@@ -222,7 +226,7 @@ class AllGamesGenerator():
 
 if __name__ == '__main__':
     newest_games_only =False
-    min_date = "2019-07-01"
+    min_date = "2019-08-01"
     AllGames = AllGamesGenerator()
 
     AllGames.main(newest_games_only,min_date)
