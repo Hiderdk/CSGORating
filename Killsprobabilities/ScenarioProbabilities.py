@@ -102,17 +102,26 @@ class KillsScenarioProbabilityGenerator():
 
     def create_over_under_variations(self,scenario_df):
         google_sheet_player_kill_over_dict = {
-            'Line':[]
+            'Predictions':[]
         }
-        for kill in range(13,25):
-           google_sheet_player_kill_over_dict['Line'].append("Over " + str(kill+0.5))
+        google_sheet_player_kill_over_dict['Predictions'].append("Estimated Kill Percentage")
+        google_sheet_player_kill_over_dict['Predictions'].append("Estimated Kills")
+        for kill in range(12,25):
+           google_sheet_player_kill_over_dict['Predictions'].append("Over " + str(kill+0.5))
 
         for team in self.team_players:
+            team_rows = scenario_df[scenario_df['team_name']==team]
+            estimated_team_kill = (team_rows['player_kills'] * team_rows['scenario_probability']).sum()
+
             for player in self.team_players[team]:
                 player_df = scenario_df[scenario_df['player_name']==player]
                 google_sheet_player_kill_over_dict[player] = []
+                estimated_player_kill = (player_df['player_kills']*player_df['scenario_probability']).sum()
+                estimated_kill_percentage = estimated_player_kill/estimated_team_kill
+                google_sheet_player_kill_over_dict['Predictions'].append(estimated_kill_percentage)
+                google_sheet_player_kill_over_dict['Estimated'].append(estimated_player_kill)
 
-                for kill in range(13, 25):
+                for kill in range(12, 25):
                     rows = player_df[player_df['player_kills']>kill]
                     sum = rows['scenario_probability'].sum()
                     percentage_prob = str(round(sum*100,0)) + "%"

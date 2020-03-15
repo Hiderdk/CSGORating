@@ -4,14 +4,15 @@ import numpy as np
 pd.set_option('display.max_columns', 100)
 from TimeWeight.EstimatedValueTimeWeight import  EstimatedValueGenerator
 from Functions.RatingFunctions import *
-from TimeWeight.timeweightconfigurations import *
+
 
 
 class SingleGameRatingGenerator():
 
 
-    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,update_dataframe=False,single_game_all_player=None):
+    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,):
         self.update_dataframe = update_dataframe
+        self.player_time_weight_methods = player_time_weight_methods
         self.single_game_all_player = single_game_all_player
         self.all_game_all_player =all_game_all_player
         self.all_player =all_player
@@ -71,11 +72,11 @@ class SingleGameRatingGenerator():
             player_index = self.all_player[self.all_player['player_id'] == player_id].index.tolist()[0]
             self.all_player.at[player_index,'start_time_weight_rating'] = start_rating
 
-        for time_weight_name in player_time_weight_methods:
-            rating_method = player_time_weight_methods[time_weight_name]
-            column_name = player_time_weight_methods[time_weight_name]['column_name']
+        for time_weight_name in self.player_time_weight_methods:
+            rating_method = self.player_time_weight_methods[time_weight_name]
+            column_name = self.player_time_weight_methods[time_weight_name]['column_name']
             #column_names_equal_to = player_time_weight_methods[time_weight_name]['column_names_equal_to']
-            backup_value = self.get_backup_value(player_id,time_weight_name,player_time_weight_methods)
+            backup_value = self.get_backup_value(player_id,time_weight_name,self.player_time_weight_methods)
 
             EstimatedValueObject = EstimatedValueGenerator(rating_method,updated_game_single_player, backup_value, self.start_date_time,column_name)
             time_estimated_value = EstimatedValueObject.get_estimated_value()

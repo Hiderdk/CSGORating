@@ -7,6 +7,7 @@ from Ratings.SingleGame import SingleGameRatingGenerator
 from Functions.ChangeDataFrame import *
 from aws import *
 from Ratings.PlayerRoundWins import PlayerRoundWinsGenerator
+from TimeWeight.timeweightconfigurations import player_time_weight_methods
 import time
 
 class AllGamesGenerator():
@@ -125,9 +126,11 @@ class AllGamesGenerator():
         self.all_game_all_player = PlayerRoundWins.new_df
 
     def create_game_team(self,all_game_all_player):
+        group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
         self.all_game_all_team = all_game_all_player.groupby(['team_id','game_id','start_date_time','game_number'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
+        self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
         return self.all_game_all_team
 
 
@@ -215,7 +218,7 @@ class AllGamesGenerator():
 
                 team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
                 SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self.all_game_all_player,self.all_player,
-                                                       update_dataframe=True,single_game_all_player=single_game_all_player)
+                                                       update_dataframe=True,single_game_all_player=single_game_all_player,player_time_weight_methods=player_time_weight_methods)
 
                 self.all_game_all_player,self.all_player = SingleGame.calculcate_ratings()
 
