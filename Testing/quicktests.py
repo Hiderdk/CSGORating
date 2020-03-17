@@ -11,7 +11,7 @@ dft[dft['most_recent_date']>'2020-01-01']
 df_file_name = "all_game_all_player_rating"
 dft = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by='start_date_time',ascending=False)
 
-t = dft[dft['player_name']=='Misutaaa']
+t = dft[dft['player_name']=='meyern']
 r = t[t['game_id']==64541]['opponent_region'].iloc[0]
 if math.isnan(r) is True:
     h = 3

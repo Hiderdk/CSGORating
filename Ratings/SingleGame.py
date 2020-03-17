@@ -245,7 +245,7 @@ class SingleGameRatingGenerator():
 
     def calculcate_opponent_adjusted_kpr(self,single_game_all_player):
         standard_rating = 1500
-        factor = 0.00001
+        factor = 0.000052
         return single_game_all_player['kpr'] + (single_game_all_player['opponent_time_weight_rating'] - standard_rating) * factor
 
     def calculcate_opponent_adjusted_performance_ratings(self,single_game_all_player):

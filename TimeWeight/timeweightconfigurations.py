@@ -17,11 +17,22 @@ player_time_weight_methods = {
 
         'column_name': 'opponent_adjusted_kpr',
         'column_names_equal_to': ['player_id'],
-        'parameter': 1,
+        'parameter': 1.5,
         'max_days_ago': 140,
         'backup_column_name': 'time_weighted_default_opponent_adjusted_kpr',
         "games_played_weight": 0.05,
-        'games_played_div_factor': 160,
+        'games_played_div_factor': 70,
+    },
+
+    'fast_time_weighted_opponent_adjusted_kpr': {
+
+        'column_name': 'opponent_adjusted_kpr',
+        'column_names_equal_to': ['player_id'],
+        'parameter': 2,
+        'max_days_ago': 140,
+        'backup_column_name': 'time_weighted_default_opponent_adjusted_kpr',
+        "games_played_weight": 0.05,
+        'games_played_div_factor': 70,
     },
 
     'time_weight_default_rating': {
