@@ -4,7 +4,7 @@ import numpy as np
 pd.set_option('display.max_columns', 100)
 from TimeWeight.EstimatedValueTimeWeight import  EstimatedValueGenerator
 from Functions.RatingFunctions import *
-
+import math
 
 
 class SingleGameRatingGenerator():
@@ -25,6 +25,7 @@ class SingleGameRatingGenerator():
         self.team_regions = {}
         self.player_ratings_dict = {}
         self.single_game_stored_player_values = {}
+        self.player_id_to_player_index = {}
 
 
     def get_team_regions(self):
@@ -33,8 +34,13 @@ class SingleGameRatingGenerator():
                                                                                     "player_id")
 
             try: self.team_regions[team_id] = get_most_frequent_column_name( single_team_all_player ,"region")
-            except ValueError: self.team_ratings[team_id] = "unknown"
-
+            except ValueError: self.team_regions[team_id] = "unknown"
+            if self.team_regions[team_id]==None:
+                self.team_regions[team_id] = 'unknown'
+            try:
+                if math.isnan(self.team_regions[team_id]) is True:
+                    self.team_regions[team_id] = 'unknown'
+            except TypeError: pass
 
     def calculcate_ratings(self):
 
@@ -91,6 +97,7 @@ class SingleGameRatingGenerator():
 
             if self.update_dataframe is True:
                 player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
+                self.player_id_to_player_index[player_id] = player_index
                 self.update_single_game_single_player(time_weight_name, EstimatedValueObject.stored_values,
                                                       player_index)
         if self.update_dataframe is True:
@@ -186,6 +193,16 @@ class SingleGameRatingGenerator():
                 column_name = time_weight_name + '_' + ratio
             self.all_game_all_player.at[index,column_name] = value
 
+    def update_expected_kill_percentage(self):
+        for team_id in self.team_player_ids:
+            sum_team_kpr = 0
+            for player_id in self.team_player_ids[team_id]:
+                sum_team_kpr += self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+            for player_id in self.team_player_ids[team_id]:
+                expected_kill_percentage = self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']/sum_team_kpr
+                index =          self.player_id_to_player_index[player_id]
+                self.all_game_all_player.at[index,'expected_kill_percentage'] = expected_kill_percentage
+
     def update_all_player(self,player_id):
 
         self.all_player.loc[self.all_player['player_id']==player_id,'time_weight_rating_certain_ratio'] = \
@@ -194,6 +211,9 @@ class SingleGameRatingGenerator():
         self.single_game_stored_player_values[player_id]['time_weight_rating']
         self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weighted_opponent_adjusted_kpr'] = \
             self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+
+
+
 
     def update_player_opponent_data(self):
         game_id = self.single_game_all_player['game_id'].iloc[0]

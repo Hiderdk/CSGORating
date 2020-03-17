@@ -25,6 +25,28 @@ GOOGLE_DRIVE_CREDENTIALS_DICT = {
 
 
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_DRIVE_CREDENTIALS_DICT, scope)
+def get_sheet_names(workbook_name):
+    file = gspread.authorize(credentials)
+    workbook = file.open(workbook_name)
+    worksheets = []
+    worksheet_list =    workbook.worksheets()
+    for s in  worksheet_list :
+        sheet_name = str(s).split("'")[1]
+        if sheet_name != 'Schedule' and sheet_name != 'Team_Names':
+            worksheets.append(str(s).split("'")[1])
+
+    return worksheets
+
+
+def delete_old_sheets(workbook_name, new_game_ids):
+    sheet_names = get_sheet_names(workbook_name)
+    file = gspread.authorize(credentials)
+    workbook = file.open(workbook_name)
+
+    for sheet_name in sheet_names:
+        if sheet_name not in new_game_ids and sheet_name != 'team_ratings' and sheet_name != 'Schedule':
+            workbook.del_worksheet(workbook.worksheet(sheet_name))
+
 
 def read_google_sheet(sheet_name,workbook_name):
     file = gspread.authorize(credentials)

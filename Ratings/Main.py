@@ -127,10 +127,13 @@ class AllGamesGenerator():
 
     def create_game_team(self,all_game_all_player):
         group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
-        self.all_game_all_team = all_game_all_player.groupby(['team_id','game_id','start_date_time','game_number'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
+        self.all_game_all_team = all_game_all_player.groupby(['team_id','team_id_opponent','game_id','start_date_time','game_number','series_id'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
         self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
+        sub_df = self.all_game_all_team[['time_weight_rating','game_id','team_id_opponent']].rename(columns={"time_weight_rating":"opponent_time_weight_rating"})
+        self.all_game_all_team = pd.merge(sub_df,self.all_game_all_team,left_on=['game_id','team_id_opponent'],right_on=['game_id','team_id'])
+
         return self.all_game_all_team
 
 
@@ -147,7 +150,7 @@ class AllGamesGenerator():
             post_series_single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
                                                                       "series_id")
             self.create_all_team(post_series_single_series_all_player)
-            if series_number % 100 == 0:
+            if series_number % 500 == 0:
 
                 vg =  self.all_player[self.all_player['time_weight_rating']!=''].sort_values(by='time_weight_rating', ascending=False)
                 print(vg[['time_weight_rating', 'time_weight_rating_certain_ratio','player_name']].dropna().head(20))
@@ -229,7 +232,7 @@ class AllGamesGenerator():
 
 if __name__ == '__main__':
     newest_games_only =False
-    min_date = "2019-08-01"
+    min_date = "2019-12-01"
     AllGames = AllGamesGenerator()
 
     AllGames.main(newest_games_only,min_date)

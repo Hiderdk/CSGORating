@@ -1,5 +1,6 @@
 import scipy.stats as ss
 import pandas as pd
+import numpy as np
 
 class BinaryKillScenarioGenerator():
 

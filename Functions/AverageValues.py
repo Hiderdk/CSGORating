@@ -5,9 +5,10 @@ def create_average_over_under_df(all_game_all_player,team_player_ids,player_id_t
     stats_dict = {
         name:[]
     }
-    stats_dict['3M Stats'].append('Games Played')
+    stats_dict[name].append('Games Played')
+    stats_dict[name].append('Historical Kill Percentage')
     for kill_value in range(12, 21):
-        stats_dict['3M Stats'].append("Over " + str ( kill_value+0.5))
+        stats_dict[name].append("Over " + str ( kill_value+0.5))
 
     min_date = datetime.datetime.now()- datetime.timedelta(months_back*365/12)
 
@@ -20,9 +21,16 @@ def create_average_over_under_df(all_game_all_player,team_player_ids,player_id_t
             games_played = len(filtered_game_single_player)
             stats_dict[player_name].append(games_played)
 
+            historical_kill_percentage = filtered_game_single_player['kill_percentage'].mean()
+            str_frequency = str(round(historical_kill_percentage * 100, 1)) + "%"
+            stats_dict[player_name].append(str_frequency)
+
             for kill_value in range(12,21):
-                over_rows = filtered_game_single_player[filtered_game_single_player['kills']>kill_value]
-                frequency = len(over_rows)/len(filtered_game_single_player)
+                if len(filtered_game_single_player) >=1:
+                    over_rows = filtered_game_single_player[filtered_game_single_player['kills']>kill_value]
+                    frequency = len(over_rows)/len(filtered_game_single_player)
+                else:
+                    frequency = 0
                 str_frequency = str(round(frequency*100,0)) + "%"
                 stats_dict[player_name].append(str_frequency)
 

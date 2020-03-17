@@ -111,15 +111,15 @@ class KillsScenarioProbabilityGenerator():
 
         for team in self.team_players:
             team_rows = scenario_df[scenario_df['team_name']==team]
-            estimated_team_kill = (team_rows['player_kills'] * team_rows['scenario_probability']).sum()
+            estimated_team_kill = round((team_rows['player_kills'] * team_rows['scenario_probability']).sum(),1)
 
             for player in self.team_players[team]:
                 player_df = scenario_df[scenario_df['player_name']==player]
                 google_sheet_player_kill_over_dict[player] = []
-                estimated_player_kill = (player_df['player_kills']*player_df['scenario_probability']).sum()
-                estimated_kill_percentage = estimated_player_kill/estimated_team_kill
-                google_sheet_player_kill_over_dict['Predictions'].append(estimated_kill_percentage)
-                google_sheet_player_kill_over_dict['Estimated'].append(estimated_player_kill)
+                estimated_player_kill = round((player_df['player_kills']*player_df['scenario_probability']).sum(),1)
+                estimated_kill_percentage = round(estimated_player_kill/estimated_team_kill,3)
+                google_sheet_player_kill_over_dict[player].append(estimated_kill_percentage)
+                google_sheet_player_kill_over_dict[player].append(estimated_player_kill)
 
                 for kill in range(12, 25):
                     rows = player_df[player_df['player_kills']>kill]
