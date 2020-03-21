@@ -40,26 +40,27 @@ class AllGamesGenerator():
         if self.newest_games_only is True:
 
             self.load_dataframes()
-            self.append_newest_all_game_all_player()
-            self.add_new_players_to_all_player()
+            if len(self.new_all_game_all_player) >= 1:
+                self.new_all_game_all_player= self.prepare_data(self.new_all_game_all_player)
+                self.append_newest_all_game_all_player()
+                self.add_new_players_to_all_player()
 
-            if len(self.all_game_all_player) >= 1:
 
                 self.convert_all_team_df_to_dict()
-
                 self.generate_player_round_wins()
-
             else:
                 print("no new games found")
+
+            series_ids = get_unique_values_from_column_in_list_format(  self.new_all_game_all_player , "series_id")
+
         else:
             self.load_data_from_sql()
+            self.all_game_all_player = self.prepare_data(self.all_game_all_player)
             self.all_player['time_weight_rating'] = ""
             self.all_player['time_weight_rating_certain_ratio'] = 0
-
-            self.all_game_all_player = self.prepare_data(self.all_game_all_player)
-            self.generate_player_round_wins()
             self.all_player['start_rating'] = None
             self.all_player['default_rating'] = None
+            self.generate_player_round_wins()
 
             series_ids = get_unique_values_from_column_in_list_format(self.all_game_all_player, "series_id")
 
@@ -106,18 +107,15 @@ class AllGamesGenerator():
         self.previous_all_game_all_player.sort_values(by='start_date_time', ascending=False).head(1)['start_date_time'].iloc[0]
         series_ids = get_all_series_ids(most_recent_date)['series_id'].unique().tolist()
         unique_series_ids = list(set(series_ids) - set(self.previous_all_game_all_player['series_id'].unique().tolist()))
-        self.all_game_all_player = get_all_game_all_player_from_series_ids(unique_series_ids)
+        self.new_all_game_all_player = get_all_game_all_player_from_series_ids(unique_series_ids)
 
-        self.all_game_all_player = pd.concat([self.previous_all_game_all_player, self.all_game_all_player],
+        self.all_game_all_player = pd.concat([self.previous_all_game_all_player, self.new_all_game_all_player],
                                              ignore_index=True)
 
 
     def load_dataframes(self):
         self.previous_all_game_all_player = pd.read_pickle(local_file_path + "\\" + "all_game_all_player_rating")
-
         self.all_player = pd.read_pickle(local_file_path + "\\" + "all_player")
-
-
         self.all_team= pd.read_pickle(local_file_path + "\\" + "all_team")
 
   
@@ -137,7 +135,6 @@ class AllGamesGenerator():
         all_game_all_player['opponent_adjusted_kpr'] = calculcate_predicted_adr(all_game_all_player)
         all_game_all_player['net_adr'] = all_game_all_player['adr']-all_game_all_player['predicted_adr']
         all_game_all_player['net_adr'] = all_game_all_player['net_adr'].fillna(0)
-
         all_game_all_player['performance_rating'] = add_performance_rating(all_game_all_player)
         all_game_all_player['opponent_adjusted_performance_rating'] = 0
 
