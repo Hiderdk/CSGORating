@@ -16,9 +16,9 @@ def calculate_certain_ratio(days_ago,games_played_weight):
         #### CREATE FUNCTION THAT has a ratio between 0 and 1. The more games played and the more recent they are the closer to 1 it is.
     return certain_ratio
 
-
+from Functions.Miscellaneous import  groupby_count
 def get_most_frequent_column_name( df,column_name):
-    from Functions.Miscellaneous import  groupby_count
+
     new_df = groupby_count(df,column_name)
     return     new_df .loc[ new_df [0].idxmax(), column_name]
 

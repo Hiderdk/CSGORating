@@ -29,6 +29,7 @@ class SingleGameRatingGenerator():
 
 
     def get_team_regions(self):
+
         for team_id,player_ids in    self.team_player_ids.items():
             single_team_all_player = get_rows_where_is_in(self.all_player, player_ids,
                                                                                     "player_id")
@@ -58,8 +59,7 @@ class SingleGameRatingGenerator():
 
         if self.update_dataframe is True:
             self.update_player_opponent_data()
-
-
+            self.update_expected_kill_percentage()
 
         return self.all_game_all_player,self.all_player
 
@@ -76,7 +76,9 @@ class SingleGameRatingGenerator():
 
             start_rating = self.calculcate_start_rating(team_id)
             player_index = self.all_player[self.all_player['player_id'] == player_id].index.tolist()[0]
+
             self.all_player.at[player_index,'start_time_weight_rating'] = start_rating
+
 
         for time_weight_name in self.player_time_weight_methods:
             rating_method = self.player_time_weight_methods[time_weight_name]
@@ -90,6 +92,7 @@ class SingleGameRatingGenerator():
             self.single_game_stored_player_values[player_id][time_weight_name + '_certain_ratio'] = EstimatedValueObject.stored_values['certain_ratio']
             self.single_game_stored_player_values[player_id][time_weight_name + '_weighted_rating'] = \
             EstimatedValueObject.stored_values['weighted_rating']
+
 
             if time_weight_name == "time_weight_rating":
                 self.player_ratings[team_id].append(time_estimated_value)
@@ -220,6 +223,7 @@ class SingleGameRatingGenerator():
         single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id'] == game_id]
         single_game_indexes = single_game_all_player.index.tolist()
         team_number = -1
+
         for team_id, player_ids in self.team_player_ids.items():
             single_game_single_team_all_player = single_game_all_player[single_game_all_player['team_id']==team_id]
             team_number+=1

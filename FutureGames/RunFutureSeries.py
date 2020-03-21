@@ -11,6 +11,9 @@ from Functions.GoogleSheets import *
 from Functions.AverageValues import create_average_over_under_df
 from TimeWeight.timeweightconfigurations import player_time_weight_methods
 
+
+covered_tournaments = ['ESL Pro League Season 11 North America']
+
 class SeriesPredictionGenerator():
 
     def __init__(self,calculcate_win_probabilities=True,calculcate_kill_probabilities=True):
@@ -36,8 +39,9 @@ class SeriesPredictionGenerator():
             local_file_path + "//all_game_all_team_rating").sort_values(by='start_date_time',
                                                                                       ascending=False)
         self. all_game_all_player = pd.read_pickle(local_file_path+"//all_game_all_player_rating").sort_values(by='start_date_time',ascending=False)
+        self.all_game_all_player = self.all_game_all_player[self.all_game_all_player['opponent_region'].notna()]
 
-        q =      self. all_game_all_player.sort_values(by='start_date_time',ascending=True).head(1000)
+
         self.all_player = pd.read_pickle(local_file_path + "//all_player")
         self.all_team = pd.read_pickle(local_file_path + "//all_team")
         min_date =datetime.datetime.now()- datetime.timedelta(0.2)
@@ -87,9 +91,11 @@ class SeriesPredictionGenerator():
                 }
                 SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time, self.all_game_all_player,self.all_player,
                                                        time_weight_configurations,update_dataframe=False, single_game_all_player=single_series_all_player)
-
-                SingleGame.calculcate_ratings()
-
+                try:
+                    SingleGame.calculcate_ratings()
+                except IndexError:
+                    print("Couldnt do series", team_names)
+                    continue
 
                 team_ratings = [
                     round(SingleGame.team_ratings[team_ids[0]],0),
@@ -158,7 +164,7 @@ class SeriesPredictionGenerator():
 
                 append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name)
         delete_old_sheets(self.workbook_name,sheet_names)
-        #clear_sheet("Schedule",self.workbook_name)
+        clear_sheet("Schedule",self.workbook_name)
         append_df_to_sheet(pd.DataFrame.from_dict(self.schedule_dict), "Schedule", self.workbook_name)
 
     def get_historical_team_stats_df(self,scenario_df,team_ids,team_names,win_probabilities):
@@ -191,9 +197,10 @@ class SeriesPredictionGenerator():
         min_average_rating_player_kills = 2000
         prize_pool = single_series_all_player['prize_pool'].iloc[0]
         is_offline = single_series_all_player['is_offline'].iloc[0]
+        tournament_name = single_series_all_player['is_offline'].iloc[0]
         current_day = datetime.datetime.today()
         days_in_the_future = (start_date_time - current_day).days
-        if days_in_the_future <= max_days_in_future_player_kills:
+        if days_in_the_future <= max_days_in_future_player_kills or tournament_name in covered_tournaments:
             if sum(team_ratings) / len(
                 team_ratings) > min_average_rating_player_kills  or prize_pool >=100000:
                     return True
@@ -232,7 +239,10 @@ class SeriesPredictionGenerator():
         player_id_to_player_name = {}
         for index,row in single_series_all_player.iterrows():
             player_id = row['player_id']
-            player_name = self.all_player[self.all_player['player_id']==player_id]['player_name'].iloc[0]
+            try:
+                player_name = self.all_player[self.all_player['player_id']==player_id]['player_name'].iloc[0]
+            except:
+                player_name =None
 
             player_id_to_player_name[player_id] = player_name
 

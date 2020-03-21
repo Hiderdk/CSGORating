@@ -56,7 +56,7 @@ def  get_all_game_all_player_from_series_ids(series_ids):
     in_p = create_in_numbers(series_ids)
     sql = """
      select te.name as team_name,p.country,gp.player_id, gp.kills,gp.headshots,gp.deaths,gp.opening_kills,opening_deaths, gp.awp,t.name as tournament_name, is_offline,prize_pool,
-    p.name as player_name, g.start_date_time,gt.rounds_won,gt.rounds_lost,gp.game_id,g.series_id,gt.team_id,map,g.game_number,adr,gt.won,gt.kills as team_kills,gp.kills/gt.kills as kill_percentage
+    p.name as player_name, g.start_date_time,gt.rounds_won,gt.rounds_lost,gp.game_id,g.series_id,gt.team_id,map,g.game_number,adr,gt.won,gt.kills as team_kills,gp.kills/gt.kills as kill_percentage,team_id_opponent
     from game_player gp 
     join game g on g.id=gp.game_id
     join game_team gt on gt.game_id = gp.game_id and gp.team_id = gt.team_id
