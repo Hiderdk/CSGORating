@@ -87,6 +87,8 @@ class SeriesPredictionGenerator():
                     'time_weight_rating':player_time_weight_methods['time_weight_rating'],
                     'time_weighted_default_opponent_adjusted_kpr':player_time_weight_methods['time_weighted_default_opponent_adjusted_kpr'],
                     'time_weighted_opponent_adjusted_kpr':player_time_weight_methods['time_weighted_opponent_adjusted_kpr'],
+                    'map_time_weighted_opponent_adjusted_kpr': player_time_weight_methods[
+                        'map_time_weighted_opponent_adjusted_kpr'],
 
                 }
                 SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time, self.all_game_all_player,self.all_player,
@@ -102,6 +104,7 @@ class SeriesPredictionGenerator():
                     round(SingleGame.team_ratings[team_ids[1]],0),
                 ]
                 win_probabilities = self.get_win_probability_regular_time(team_ratings)
+
 
             elif self.calculcate_win_probabilities is False:
                 time_weight_configurations = {
@@ -152,22 +155,69 @@ class SeriesPredictionGenerator():
                 historical_over_df = create_average_over_under_df(self.all_game_all_player, team_player_ids,
                                                                   player_id_to_player_name, months_back=4,
                                                                   name='4M Stats')
-                win_rate_df =self.get_historical_team_stats_df(scenario_df,team_ids,team_names,win_probabilities)
+                win_rate_df,estimated_team_kills =self.get_historical_team_stats_df_and_estimated_team_kills(scenario_df,team_ids,team_names,win_probabilities)
+                map_kpr_df = self.create_map_kpr_df(player_id_to_player_name,team_player_ids, SingleGame.single_game_stored_player_values,
+                                                    estimated_team_kills)
+
                 try:
                     clear_sheet(sheet_name, self.workbook_name)
                 except Exception:
                     pass
+
+
+
+
+
                 create_new_sheet_if_not_exist(sheet_name, self.workbook_name)
                 append_df_to_sheet(win_rate_df,sheet_name,self.workbook_name,row_number=1,column_number=13)
 
                 append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
-
                 append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name)
+                append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+
         delete_old_sheets(self.workbook_name,sheet_names)
         clear_sheet("Schedule",self.workbook_name)
         append_df_to_sheet(pd.DataFrame.from_dict(self.schedule_dict), "Schedule", self.workbook_name)
 
-    def get_historical_team_stats_df(self,scenario_df,team_ids,team_names,win_probabilities):
+
+    def create_map_kpr_df(self,player_id_to_player_name,team_players,single_game_stored_player_values,estimated_team_kills):
+
+        map_kpr_dict = {
+            'Estimated KPR Maps':[]
+        }
+
+
+        maps = ['mirage','inferno','dust2','nuke','overpass','vertigo','train']
+        for map in maps:
+            map_kpr_dict['Estimated KPR Maps'].append(map)
+
+        for team_number,team in enumerate(team_players):
+            for map in maps:
+                team_sum_estimated_map_kpr = 0
+                raw_estimated_map_kprs = {}
+                for player_id in team_players[team]:
+                    player_name = player_id_to_player_name[player_id]
+                    if player_name not in map_kpr_dict:
+                        map_kpr_dict[player_name] = []
+
+                    column_name = 'map_time_weighted_opponent_adjusted_kpr_' + map
+                    raw_estimated_map_kprs[player_id] = single_game_stored_player_values[player_id][column_name]
+                    team_sum_estimated_map_kpr +=   raw_estimated_map_kprs[player_id]
+
+
+                for player_id in team_players[team]:
+                    player_name = player_id_to_player_name[player_id]
+                    estimated_kill_percentage =    raw_estimated_map_kprs[player_id] /   team_sum_estimated_map_kpr
+                    estimated_map_kpr = round(estimated_kill_percentage*estimated_team_kills[team_number],1)
+                    map_kpr_dict[player_name].append(estimated_map_kpr)
+
+
+
+        return pd.DataFrame.from_dict(map_kpr_dict)
+
+
+
+    def get_historical_team_stats_df_and_estimated_team_kills(self,scenario_df,team_ids,team_names,win_probabilities):
         min_date = datetime.datetime.now() - datetime.timedelta(4 * 365 / 12)
         filtered_game_all_team = self.all_game_all_team[self.all_game_all_team['start_date_time'] > min_date]
         win_rates_4_month =[]
@@ -190,7 +240,7 @@ class SeriesPredictionGenerator():
             'ot': [win_probabilities['ot'], "","",""]
 
         }
-        return  pd.DataFrame.from_dict(win_rate_dict)
+        return  pd.DataFrame.from_dict(win_rate_dict),estimated_team_kills
 
     def is_over_under_kill_series(self,start_date_time,team_ratings,single_series_all_player):
         max_days_in_future_player_kills = 5

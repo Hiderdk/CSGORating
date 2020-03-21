@@ -10,7 +10,7 @@ import math
 class SingleGameRatingGenerator():
 
 
-    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,):
+    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,map_names=['all']):
         self.update_dataframe = update_dataframe
         self.player_time_weight_methods = player_time_weight_methods
         self.single_game_all_player = single_game_all_player
@@ -26,6 +26,7 @@ class SingleGameRatingGenerator():
         self.player_ratings_dict = {}
         self.single_game_stored_player_values = {}
         self.player_id_to_player_index = {}
+        self.map_names = map_names
 
 
     def get_team_regions(self):
@@ -46,8 +47,8 @@ class SingleGameRatingGenerator():
     def calculcate_ratings(self):
 
         self.get_team_regions()
-        for team_id,player_ids in    self.team_player_ids.items():
 
+        for team_id,player_ids in    self.team_player_ids.items():
 
             self.player_ratings[team_id] = []
             self.team_ratings[team_id] = 0
@@ -81,33 +82,54 @@ class SingleGameRatingGenerator():
 
 
         for time_weight_name in self.player_time_weight_methods:
+
             rating_method = self.player_time_weight_methods[time_weight_name]
             column_name = self.player_time_weight_methods[time_weight_name]['column_name']
-            #column_names_equal_to = player_time_weight_methods[time_weight_name]['column_names_equal_to']
-            backup_value = self.get_backup_value(player_id,time_weight_name,self.player_time_weight_methods)
+            column_names_equal_to = self.player_time_weight_methods[time_weight_name]['column_names_equal_to']
+            filtered_rows = updated_game_single_player.copy()
+            for column_name_equal_to,equal_to_values in column_names_equal_to.items():
 
-            EstimatedValueObject = EstimatedValueGenerator(rating_method,updated_game_single_player, backup_value, self.start_date_time,column_name)
-            time_estimated_value = EstimatedValueObject.get_estimated_value()
-            self.single_game_stored_player_values[player_id][time_weight_name] = time_estimated_value
-            self.single_game_stored_player_values[player_id][time_weight_name + '_certain_ratio'] = EstimatedValueObject.stored_values['certain_ratio']
-            self.single_game_stored_player_values[player_id][time_weight_name + '_weighted_rating'] = \
-            EstimatedValueObject.stored_values['weighted_rating']
+                for equal_to_value in equal_to_values:
+
+                    filtered_rows = self.get_filtered_rows(column_name_equal_to,equal_to_value,updated_game_single_player) ### CURRENTLY DOES NOT HANDLE MULTPLE DIFFERNT FILTERS
+                    backup_value = self.get_backup_value(player_id,time_weight_name,self.player_time_weight_methods)
 
 
-            if time_weight_name == "time_weight_rating":
-                self.player_ratings[team_id].append(time_estimated_value)
-                self.team_ratings[team_id] += time_estimated_value / len(self.team_player_ids[team_id])
 
-            if self.update_dataframe is True:
-                player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
-                self.player_id_to_player_index[player_id] = player_index
-                self.update_single_game_single_player(time_weight_name, EstimatedValueObject.stored_values,
-                                                      player_index)
+
+                    EstimatedValueObject = EstimatedValueGenerator(rating_method,filtered_rows, backup_value, self.start_date_time,column_name)
+                    time_estimated_value = EstimatedValueObject.get_estimated_value()
+                    if column_name_equal_to == "player_id":
+                        output_column_name = time_weight_name
+                    else:
+                        output_column_name = time_weight_name + '_' + equal_to_value
+                    self.single_game_stored_player_values[player_id][output_column_name] = time_estimated_value
+                    self.single_game_stored_player_values[player_id][output_column_name + '_certain_ratio'] = EstimatedValueObject.stored_values['certain_ratio']
+                    self.single_game_stored_player_values[player_id][output_column_name + '_weighted_rating'] = \
+                    EstimatedValueObject.stored_values['weighted_rating']
+
+
+                    if time_weight_name == "time_weight_rating":
+                        self.player_ratings[team_id].append(time_estimated_value)
+                        self.team_ratings[team_id] += time_estimated_value / len(self.team_player_ids[team_id])
+
+                    if self.update_dataframe is True:
+                        player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
+                        self.player_id_to_player_index[player_id] = player_index
+                        self.update_single_game_single_player(time_weight_name, EstimatedValueObject.stored_values,
+                                                              player_index)
         if self.update_dataframe is True:
 
             self.update_all_player(player_id)
 
+    def get_filtered_rows(self,column_name_equal_to,equal_to_value,filtered_rows):
+        if column_name_equal_to == "player_id":
+            updated_filtered_rows = filtered_rows
+        else:
+            updated_filtered_rows = filtered_rows[
+                filtered_rows[column_name_equal_to].str.lower() == equal_to_value]
 
+        return updated_filtered_rows
 
     def get_backup_value(self,id,metric,method):
 
