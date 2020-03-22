@@ -10,7 +10,7 @@ import math
 class SingleGameRatingGenerator():
 
 
-    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,map_names=['all']):
+    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,map_names=[]):
         self.update_dataframe = update_dataframe
         self.player_time_weight_methods = player_time_weight_methods
         self.single_game_all_player = single_game_all_player
@@ -88,7 +88,8 @@ class SingleGameRatingGenerator():
             column_names_equal_to = self.player_time_weight_methods[time_weight_name]['column_names_equal_to']
             filtered_rows = updated_game_single_player.copy()
             for column_name_equal_to,equal_to_values in column_names_equal_to.items():
-
+                if column_name_equal_to == "map" and self.map_names != []:
+                    equal_to_values = self.map_names
                 for equal_to_value in equal_to_values:
 
                     filtered_rows = self.get_filtered_rows(column_name_equal_to,equal_to_value,updated_game_single_player) ### CURRENTLY DOES NOT HANDLE MULTPLE DIFFERNT FILTERS

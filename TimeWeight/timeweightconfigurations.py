@@ -74,10 +74,10 @@ player_time_weight_methods = {
         'column_name': 'opponent_adjusted_kpr',
         'column_names_equal_to': {'map':['mirage','inferno','dust2','nuke','overpass','vertigo','train'],'player_id':['player_id']},
         'parameter': 1.5,
-        'max_days_ago': 140,
+        'max_days_ago': 170,
         'backup_column_name': 'time_weighted_opponent_adjusted_kpr',
         "games_played_weight": 0.05,
-        'games_played_div_factor': 30,
+        'games_played_div_factor': 24,
     },
 
 }
