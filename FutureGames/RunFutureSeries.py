@@ -1,16 +1,17 @@
 from settings import *
 from SQL import *
 import datetime
-from Functions.Filters import *
-from Functions.SingleValue import *
+
 from Functions.Lists import *
 from Ratings.SingleGame import SingleGameRatingGenerator
-from Ratings.Main import AllGamesGenerator
-from Killsprobabilities.ScenarioProbabilities import KillsScenarioProbabilityGenerator
+
+from Predictions.ScenarioProbabilities import KillsScenarioProbabilityGenerator
 from Functions.GoogleSheets import *
 from Functions.AverageValues import create_average_over_under_df
 from TimeWeight.timeweightconfigurations import player_time_weight_methods
+from Functions.Miscellaneous import scale_features_and_insert_to_dataframe
 
+ot_default_probability = 0.093
 
 covered_tournaments = ['ESL Pro League Season 11 North America']
 
@@ -21,10 +22,18 @@ class SeriesPredictionGenerator():
         self.calculcate_kill_probabilities = calculcate_kill_probabilities
 
         self.player_ratings = {}
+        self.ml_models_dict = {
+            "won_regular": pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\own_won_csgo_regular"),
+            "won_regular_scaled": pd.read_pickle(
+                r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\own_won_csgo_regular_scaled"),
+            "won": pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\own_won_csgo_all"),
+            "won_scaled": pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\own_won_csgo_all_scaled"),
 
-        self.workbook_name = "CSGO_Kills"
+        }
+        self.workbook_name = "CSGO"
         self.schedule_dict = {
             'Date':[],
+            'Tournament':[],
             'Team1':[],
             'Team2':[],
             'Win Probability1':[],
@@ -93,6 +102,7 @@ class SeriesPredictionGenerator():
                 }
                 SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time, self.all_game_all_player,self.all_player,
                                                        time_weight_configurations,update_dataframe=False, single_game_all_player=single_series_all_player)
+
                 try:
                     SingleGame.calculcate_ratings()
                 except IndexError:
@@ -131,10 +141,11 @@ class SeriesPredictionGenerator():
             self.schedule_dict['Date'].append(start_date_time)
             self.schedule_dict['Team1'].append(team_names[0])
             self.schedule_dict['Team2'].append(team_names[1])
-            self.schedule_dict['Win Probability1'].append(str(round(win_probabilities[0]*100,0)) + "%")
-            self.schedule_dict['Win Probability2'].append(str(round(win_probabilities[1]*100,0)) + "%")
+            self.schedule_dict['Win Probability1'].append(str(round(win_probabilities['0_all']*100,0)) + "%")
+            self.schedule_dict['Win Probability2'].append(str(round(win_probabilities['1_all']*100,0)) + "%")
             self.schedule_dict['Rating1'].append(team_ratings[0])
             self.schedule_dict['Rating2'].append(team_ratings[1])
+            self.schedule_dict['Tournament'].append(single_series_all_player['tournament_name'].iloc[0])
 
 
 
@@ -169,11 +180,15 @@ class SeriesPredictionGenerator():
 
 
                 create_new_sheet_if_not_exist(sheet_name, self.workbook_name)
-                append_df_to_sheet(win_rate_df,sheet_name,self.workbook_name,row_number=1,column_number=13)
 
-                append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
-                append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name)
-                append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+                try:
+                    append_df_to_sheet(win_rate_df,sheet_name,self.workbook_name,row_number=1,column_number=13)
+
+                    append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
+                    append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name)
+                    append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+                except Exception as e:
+                    print(e)
 
         delete_old_sheets(self.workbook_name,sheet_names)
         clear_sheet("Schedule",self.workbook_name)
@@ -235,16 +250,15 @@ class SeriesPredictionGenerator():
 
         win_rate_dict = {
             'Team Stats': ["Win Probability", "4 Month Win Rate","Average 4 Months Kills", "Estimated Kills"],
-            team_names[0]: [win_probabilities[0], win_rates_4_month[0],average_kills_4_month[0],estimated_team_kills[0]],
-            team_names[1]: [win_probabilities[1], win_rates_4_month[1],average_kills_4_month[1],estimated_team_kills[1]],
-            'ot': [win_probabilities['ot'], "","",""]
+            team_names[0]: [win_probabilities['0_all'], win_rates_4_month[0],average_kills_4_month[0],estimated_team_kills[0]],
+            team_names[1]: [win_probabilities['1_all'], win_rates_4_month[1],average_kills_4_month[1],estimated_team_kills[1]],
 
         }
         return  pd.DataFrame.from_dict(win_rate_dict),estimated_team_kills
 
     def is_over_under_kill_series(self,start_date_time,team_ratings,single_series_all_player):
         max_days_in_future_player_kills = 5
-        min_average_rating_player_kills = 2000
+        min_average_rating_player_kills = 2100
         prize_pool = single_series_all_player['prize_pool'].iloc[0]
         is_offline = single_series_all_player['is_offline'].iloc[0]
         tournament_name = single_series_all_player['is_offline'].iloc[0]
@@ -258,18 +272,23 @@ class SeriesPredictionGenerator():
 
     def calculcate_expected_player_kill_percentages(self,team_player_ids,player_id_to_player_name,SingleGame):
         expected_player_kill_percentages = {}
+        expected_player_kill_map_percentages = {}
         for team_id,player_ids in team_player_ids.items():
             team_estimated_kprs = []
+            team_estimated_map_kprs = []
             player_names = []
             for player_id in player_ids:
                 estimated_kpr = SingleGame.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+
                 team_estimated_kprs.append(estimated_kpr)
+                team_estimated_map_kprs.append(estimated_kpr)
                 player_name = player_id_to_player_name[player_id]
                 player_names.append(player_name)
 
             for player_number,player_name in enumerate(player_names):
                 estimated_kill_percentage = team_estimated_kprs[player_number]/sum(team_estimated_kprs)
                 expected_player_kill_percentages[player_name] = estimated_kill_percentage
+                expected_player_kill_map_percentages[player_name] = team_estimated_map_kprs[player_number]/sum(team_estimated_map_kprs)
 
         return expected_player_kill_percentages
 
@@ -300,11 +319,30 @@ class SeriesPredictionGenerator():
 
     def get_win_probability_regular_time(self,team_ratings):
         win_probabilities = {}
+       # team_ratings[0] = 0
+       # team_ratings[1] = 0
         rating_difference = team_ratings[0]- team_ratings[1]
-        win_probabilities['ot'] = 0.11
-        win_regular = 1-win_probabilities['ot']
-        win_probabilities[0] = round(win_regular/(win_regular+10**(-rating_difference/4000)),3)
-        win_probabilities[1] = win_regular-      win_probabilities[0]
+
+        #regular_model = self.ml_models_dict['won_regular']
+        #scaled_data_regular = self.ml_models_dict['won_regular_scaled']
+        #scaled_df = scale_features_and_insert_to_dataframe(scaled_data_regular, {'rating_difference':rating_difference})
+        #win_probability_regular = regular_model.predict_proba(scaled_df)[0][1]
+        win_probabilities['ot'] = ot_default_probability
+        #win_regular = 1-win_probabilities['ot']
+       # other_win_probability =  round(win_regular/(win_regular+10**(-rating_difference/4000)),3)
+        #win_probabilities[0] = win_probability_regular
+        #win_probabilities[1] = win_regular-      win_probabilities[0]
+
+        all_model = self.ml_models_dict['won']
+        scaled_data_all= self.ml_models_dict['won_scaled']
+        scaled_df = scale_features_and_insert_to_dataframe(scaled_data_all,
+                                                           {'rating_difference': rating_difference})
+        win_probability_all = round(all_model.predict_proba(scaled_df)[0][1],3)
+        win_probabilities['0_all'] = win_probability_all
+        win_probabilities['1_all'] = 1-win_probability_all
+
+
+
 
         return win_probabilities
 

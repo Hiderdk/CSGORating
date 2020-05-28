@@ -18,7 +18,8 @@ def create_in_numbers(ids):
 
 def get_all_from_series_player(min_date):
     sql = """
-    select te.name as team_name,sp.series_id,player_id,sp.team_id,team_id_opponent, s.start_date_time,t.is_offline,t.prize_pool
+    select te.name as team_name,sp.series_id,player_id,sp.team_id,team_id_opponent,
+     s.start_date_time,t.is_offline,t.prize_pool,t.name as tournament_name
      from series_player sp
     join series s on s.id = sp.series_id
     join series_team st on st.series_id = sp.series_id and sp.team_id = st.team_id
@@ -29,7 +30,7 @@ def get_all_from_series_player(min_date):
     return pd.read_sql(sql,conn,params=[min_date])
 
 
-def get_all_time_game_player_data(min_date):
+def get_all_time_game_player_data(min_date,max_date):
     sql="""    
     select te.name as team_name,p.country,gp.player_id, gp.kills,gp.headshots,gp.deaths,gp.opening_kills,opening_deaths, gp.awp,t.name as tournament_name, is_offline,prize_pool,
     p.name as player_name, g.start_date_time,gt.rounds_won,gt.rounds_lost,gp.game_id,g.series_id,
@@ -41,9 +42,9 @@ def get_all_time_game_player_data(min_date):
     join player p on p.id = gp.player_id  
     join series s on s.id=g.series_id
     join tournament t on s.tournament_id= t.id
-    where g.start_date_time > %s
+    where g.start_date_time between %s and %s
     """
-    return pd.read_sql(sql,conn,params=[min_date])
+    return pd.read_sql(sql,conn,params=[min_date,max_date])
 
 def get_player():
     sql = """
@@ -106,11 +107,11 @@ def get_game_team_rating(min_date):
 
 def get_game_team(min_date):
     sql = """
-    select te.name as team_name,gt.team_id,rounds_won,gt.rounds_lost,map,won,start_date_time,game_number,game_id,gt.kills,gt.kills_opponent
+    select te.name as team_name,gt.team_id,gt.rounds_won,gt.rounds_lost,map,won,start_date_time,game_number,game_id,gt.kills,gt.kills_opponent
     from game_team gt
     join team te on te.id = gt.team_id
     join game g on g.id = gt.game_id
-    where g.start_date_time > %s and rounds_won+rounds_lost <> 30
+    where g.start_date_time > %s
 
     """
     return pd.read_sql(sql, conn, params=[min_date])

@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 import datetime
 
@@ -21,8 +20,7 @@ class TimeWeightGenerator():
 
     def main(self):
         self.min_date_time =  self.current_date_time - datetime.timedelta(days=self.min_days_ago)
-        if len(self.df) >=30:
-            h = 3
+
         self.new_df =  get_rows_where_column_larger_than(self.df,   self.min_date_time, "start_date_time")
         if len(self.new_df) >=1:
             if 'weight_multiplier' in self.rating_methods:

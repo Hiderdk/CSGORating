@@ -10,10 +10,22 @@ from Ratings.PlayerRoundWins import PlayerRoundWinsGenerator
 from TimeWeight.timeweightconfigurations import player_time_weight_methods
 import time
 
-class AllGamesGenerator():
+class RatingGenerator():
 
-    def __init__(self,newest_games_only,min_date):
+    def __init__(self,
+                 newest_games_only=False,
+                 min_date="2015-07-01",
+                 max_date="2030-01-01",
+                 insert_final_file=True,
+                 parameter_configuration=player_time_weight_methods,
+                 verbose=True
+                 ):
+
+        self.verbose = verbose
         self.newest_games_only = newest_games_only
+        self.parameter_configuration=parameter_configuration
+        self.max_date = max_date
+        self.insert_final_file = insert_final_file
         self.min_date = min_date
         self.all_team_dict = {
             'team_id': [],
@@ -41,6 +53,7 @@ class AllGamesGenerator():
 
             self.load_dataframes()
             self.get_newest_all_game_all_player()
+
             if len(self.new_all_game_all_player) >= 1:
                 self.new_all_game_all_player= self.add_columns_to_all_game_all_player(self.new_all_game_all_player)
 
@@ -53,7 +66,10 @@ class AllGamesGenerator():
                 self.convert_all_team_df_to_dict()
                 self.generate_player_round_wins()
             else:
-                print("no new games found")
+                if self.verbose == True:
+                    print("no new games found")
+
+
 
             series_ids = get_unique_values_from_column_in_list_format(  self.new_all_game_all_player , "series_id")
 
@@ -66,14 +82,26 @@ class AllGamesGenerator():
             self.generate_player_round_wins()
 
             series_ids = get_unique_values_from_column_in_list_format(self.all_game_all_player, "series_id")
+        try:
+            self.all_game_all_player =     self.all_game_all_player.sort_values(by='start_date_time',ascending=True)
 
-        self.all_game_all_player =     self.all_game_all_player.sort_values(by='start_date_time',ascending=True)
-        v = self.all_game_all_player.sort_values(by='start_date_time',ascending=False).head(500)
+        except AttributeError: ## No NEW GAMES
+            pass
+
+
         self.calculcate_rating_for_all_series(series_ids)
 
-        self.create_game_team(self.all_game_all_player)
-        self.insert_files()
-        self.print_out_ratings()
+        if self.insert_final_file == True:
+            try:
+                self.create_game_team(self.all_game_all_player)
+                self.insert_files()
+                self.print_out_ratings()
+            except AttributeError: ## No NEW GAMES
+                pass
+
+        else:
+            self.insert_files("process_")
+
 
     def convert_all_team_df_to_dict(self):
         for index,row in self.all_team.iterrows():
@@ -83,16 +111,18 @@ class AllGamesGenerator():
 
 
     def insert_files(self,extra_name=""):
+        self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
         insert_df = self.all_game_all_player[np.isfinite(self.all_game_all_player['rating'])]
         insert_df.to_pickle(local_file_path +"\\" + extra_name + "all_game_all_player_rating")
         self.all_player.to_pickle(local_file_path +"\\" + extra_name + "all_player")
         self.all_team.to_pickle(local_file_path +"\\" + extra_name + "all_team")
         all_game_all_team = self.create_game_team(self.all_game_all_player)
         all_game_all_team.to_pickle(local_file_path +"\\" + extra_name + "all_game_all_team_rating")
-        print("Updated file")
+        if self.verbose == True:
+            print("Updated file")
 
     def load_data_from_sql(self):
-        self.all_game_all_player = get_all_time_game_player_data(self.min_date)
+        self.all_game_all_player = get_all_time_game_player_data(self.min_date,self.max_date)
         self.all_player = get_player()
 
 
@@ -105,6 +135,7 @@ class AllGamesGenerator():
         player_ids_existing = self.all_player['player_id'].unique().tolist()
         unique_player_ids = list(set(player_ids_sql) - set(player_ids_existing))
         new_player_rows = all_player_sql.loc[all_player_sql['player_id'].isin(unique_player_ids)]
+
         for index,row in new_player_rows.iterrows():
             self.all_player = self.all_player.append(row)
 
@@ -162,7 +193,7 @@ class AllGamesGenerator():
 
     def create_game_team(self,all_game_all_player):
         group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
-        self.all_game_all_team = all_game_all_player.groupby(['rounds_won','rounds_lost','team_id','team_id_opponent','game_id','start_date_time','game_number','series_id'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
+        self.all_game_all_team = all_game_all_player.groupby(['opponent_region','rounds_won','rounds_lost','team_id','team_id_opponent','game_id','start_date_time','game_number','series_id'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
         self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
@@ -183,12 +214,15 @@ class AllGamesGenerator():
                                                                            "series_id")
             start_date_time = single_series_all_player['start_date_time'].iloc[0]
             self.single_series(start_date_time,single_series_all_player)
-            print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-st,3))
+            if self.verbose == True:
+                print("Generating Rating for " + str(series_number) + " out of " + str(len(series_ids)) + " series ids",round(time.time()-st,3))
             post_series_single_series_all_player = get_rows_where_column_equal_to(self.all_game_all_player, series_id,
                                                                       "series_id")
             self.insert_to_all_team(post_series_single_series_all_player)
+
             if series_number % 400 == 0:
-                self.print_out_ratings()
+                if self.verbose == True:
+                    self.print_out_ratings()
 
                 self.insert_files("process_")
 
@@ -261,8 +295,9 @@ class AllGamesGenerator():
 
 
             single_game_all_player = get_rows_where_column_equal_to(single_series_all_player, game_number,
-                                                                         "game_number")
-            print("Date", start_date_time)
+                                                                      "game_number")
+            if self.verbose == True:
+                print("Date", start_date_time)
             first_row = single_game_all_player.head(1)
             self.game_id = first_row['game_id'].iloc[0]
             if len(single_game_all_player) != 10:
@@ -274,8 +309,8 @@ class AllGamesGenerator():
 
 
                 team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
-                SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self.all_game_all_player,self.all_player,
-                                                       update_dataframe=True,single_game_all_player=single_game_all_player,player_time_weight_methods=player_time_weight_methods,map_names=[map])
+                SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self.all_game_all_player,self.all_player,self.parameter_configuration,
+                                                       update_dataframe=True,single_game_all_player=single_game_all_player,map_names=[map])
 
                 self.all_game_all_player,self.all_player = SingleGame.calculcate_ratings()
 
@@ -285,8 +320,14 @@ class AllGamesGenerator():
 
 
 if __name__ == '__main__':
-    newest_games_only =True
+    from TimeWeight.timeweightconfigurations import player_time_weight_methods
+    configurations = {
+        'player_time_weight_methods':player_time_weight_methods
+    }
+
+
+    newest_games_only =False
     min_date = "2015-07-01"
-    AllGames = AllGamesGenerator(newest_games_only,min_date)
+    AllGames = RatingGenerator(newest_games_only=False,min_date="2015-07-01",configurations=configurations)
 
     AllGames.main()

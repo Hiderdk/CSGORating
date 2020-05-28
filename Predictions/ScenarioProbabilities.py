@@ -1,10 +1,7 @@
-from Ratings.SingleGame import SingleGameRatingGenerator
+
 from Functions.Miscellaneous import *
-from Killsprobabilities.BinaryKillScenarioGenerator import BinaryKillScenarioGenerator
-import scipy.stats as ss
+from Predictions.BinaryKillScenarioGenerator import BinaryKillScenarioGenerator
 
-
-ot_probability = 0.08
 
 class KillsScenarioProbabilityGenerator():
 
@@ -13,27 +10,14 @@ class KillsScenarioProbabilityGenerator():
         self.result_probabilities = result_probabilities
         self.team_ratings = team_ratings
 
-        net_round_wins_0 = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_0")
-        net_round_wins_ot = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_ot")
-        net_round_wins_1 = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_1")
-        net_round_wins_0_scaled = pd.read_pickle(
-            r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_0_scaled")
-        net_round_wins_1_scaled = pd.read_pickle(
-            r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_1_scaled")
-        net_round_wins_ot_scaled = pd.read_pickle(
-            r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_ot_scaled")
 
         self.ml_models_dict = {
-            "0": net_round_wins_0,
-            "1": net_round_wins_1,
-            "0_scaled": net_round_wins_0_scaled,
-            "1_scaled": net_round_wins_1_scaled,
-            'ot': net_round_wins_ot,
-            'ot_scaled': net_round_wins_ot_scaled,
-            'team_kill_probabilities': pd.read_pickle(
-                r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\ot_0_net_rounds_to_kills"),
-            'ot_team_kill_probabilities': pd.read_pickle(
-                r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\ot_1_net_rounds_to_kills"),
+            'kills': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo"),
+            'kills_scaled': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo_scaled"),
+            'net_round_wins_all_scaled':pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_all_scaled"),
+            'net_round_wins_all': pd.read_pickle(
+                r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_all"),
+
         }
         self.expected_player_kill_percentages = expected_player_kill_percentages
 
@@ -46,18 +30,44 @@ class KillsScenarioProbabilityGenerator():
 
         return team_ids
 
+    def update_result_probabilities(self):
+        unscaled_values = {
+            'rating_difference': self.team_ratings[0] - self.team_ratings[1]
+
+        }
+
+
+        ml_model_scaled_data = self.ml_models_dict['net_round_wins_all_scaled']
+        ml_model = self.ml_models_dict['net_round_wins_all']
+        scaled_values = scale_features_and_insert_to_dataframe(ml_model_scaled_data, unscaled_values)
+        round_probabilities = ml_model.predict_proba(scaled_values)[0]
+        round_difference_classes = ml_model.classes_.tolist()
+        index = round_difference_classes.index(0)
+        ot_probability= round_probabilities[index]
+        ot_probability =ot_probability*0.75
+        self.result_probabilities['ot'] = ot_probability
+
+
+
+
 
     def generate_round_probabilities(self):
-
+        self.update_result_probabilities()
 
         BinaryKillScenario = BinaryKillScenarioGenerator()
         for number,team in enumerate(self.team_players):
             unscaled_values = {
                 'rating_difference':self.team_ratings[number]-self.team_ratings[-number+1]
             }
-            team_kill_probabilities = self.create_team_kill_probabilities(unscaled_values)
 
-            for team_kill,team_kill_probability in team_kill_probabilities.items():
+            ml_model_scaled_data = self.ml_models_dict['kills_scaled']
+            ml_model = self.ml_models_dict['kills']
+            scaled_values = scale_features_and_insert_to_dataframe(ml_model_scaled_data, unscaled_values)
+            team_kill_probabilities = ml_model.predict_proba(scaled_values)[0]
+            team_kills = ml_model.classes_
+            sum_k = 0
+            for team_kill_number,team_kill in enumerate(team_kills):
+                team_kill_probability = team_kill_probabilities[team_kill_number]
 
                 for player in self.team_players[team]:
                     estimated_player_kill_percentage = self.expected_player_kill_percentages[player]
@@ -65,34 +75,25 @@ class KillsScenarioProbabilityGenerator():
                     BinaryKillScenario.create_scenario_probabilities_for_single_player_single_team_kill \
                                 (team,player, estimated_player_kill_percentage, team_kill, team_kill_probability)
 
+                sum_k+=        team_kill_probability*team_kill
+
+
+
 
         return pd.DataFrame.from_dict(BinaryKillScenario.scenario_dict)
 
-    def create_team_kill_probabilities(self,unscaled_values):
+    def create_team_kill_probabilities(self,team_number,unscaled_values):
         team_kill_probabilities = {}
+        tot_k = 0
 
-        for result, result_probability in self.result_probabilities.items():
-            ml_model_scaled_data = self.ml_models_dict[str(result) + '_scaled']
-            self.ml_model = self.ml_models_dict[str(result)]
-            scaled_values = scale_features_and_insert_to_dataframe(ml_model_scaled_data, unscaled_values)
-            round_probabilities = self.ml_model.predict_proba(scaled_values)[0]
-            round_difference_classes = self.ml_model.classes_
+        result_probability = 1
+        for team_kill, team_kill_probability in team_kill_probabilities_given_outcome.items():
 
-            for number, round_difference in enumerate(round_difference_classes):
-                if round_difference == 0:
-                    continue
-                round_probability = round_probabilities[number]
-                if result == "ot":
-                    team_kill_probabilities_lookup_table =       self.ml_models_dict['ot_team_kill_probabilities']
-                else:
-                    team_kill_probabilities_lookup_table = self.ml_models_dict['team_kill_probabilities']
-                team_kill_probabilities_given_outcome = team_kill_probabilities_lookup_table[round_difference]
-                result_outcome_probability = round_probability * result_probability
 
-                for team_kill,team_kill_probability in team_kill_probabilities_given_outcome.items():
-                    if team_kill not in team_kill_probabilities:
-                        team_kill_probabilities[team_kill] = 0
-                    team_kill_probabilities[team_kill] +=team_kill_probability * result_outcome_probability
+
+            if team_kill not in team_kill_probabilities:
+                team_kill_probabilities[team_kill] = 0
+            team_kill_probabilities[team_kill] +=result_probability * 1
 
 
         return team_kill_probabilities

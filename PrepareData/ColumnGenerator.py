@@ -41,7 +41,7 @@ class ColumnGenerator():
 if __name__ == '__main__':
     import pandas as pd
     from Ratings.Main import *
-    Time = AllGamesGenerator()
+    Time = RatingGenerator()
 
     all_team = pd.read_pickle(local_file_path + "\\all_team").sort_values(by='rating',ascending=False)
     file_name = "all_game_all_player_performance_rating"

@@ -5,12 +5,25 @@ pd.set_option('display.max_columns', 100)
 from TimeWeight.EstimatedValueTimeWeight import  EstimatedValueGenerator
 from Functions.RatingFunctions import *
 import math
+from TimeWeight.timeweightconfigurations import player_time_weight_methods
 
 
 class SingleGameRatingGenerator():
 
 
-    def __init__(self,team_ids,team_player_ids,start_date_time,all_game_all_player,all_player,player_time_weight_methods,update_dataframe=False,single_game_all_player=None,map_names=[]):
+    def __init__(self,
+                 team_ids,
+                 team_player_ids,
+                 start_date_time,
+                 all_game_all_player,
+                 all_player,
+                 player_time_weight_methods,
+                 update_dataframe=False,
+                 single_game_all_player=None,
+                 map_names=[]
+                 ):
+
+
         self.update_dataframe = update_dataframe
         self.player_time_weight_methods = player_time_weight_methods
         self.single_game_all_player = single_game_all_player
@@ -60,7 +73,9 @@ class SingleGameRatingGenerator():
 
         if self.update_dataframe is True:
             self.update_player_opponent_data()
-            self.update_expected_kill_percentage()
+            player_id0 = self.team_player_ids[self.team_ids[0]][0]
+            if 'time_weighted_opponent_adjusted_kpr' in self.single_game_stored_player_values[player_id0]:
+                self.update_expected_kill_percentage()
 
         return self.all_game_all_player,self.all_player
 
@@ -81,12 +96,12 @@ class SingleGameRatingGenerator():
             self.all_player.at[player_index,'start_time_weight_rating'] = start_rating
 
 
-        for time_weight_name in self.player_time_weight_methods:
+        for time_weight_name in player_time_weight_methods:
 
             rating_method = self.player_time_weight_methods[time_weight_name]
             column_name = self.player_time_weight_methods[time_weight_name]['column_name']
             column_names_equal_to = self.player_time_weight_methods[time_weight_name]['column_names_equal_to']
-            filtered_rows = updated_game_single_player.copy()
+
             for column_name_equal_to,equal_to_values in column_names_equal_to.items():
                 if column_name_equal_to == "map" and self.map_names != []:
                     equal_to_values = self.map_names
@@ -94,9 +109,6 @@ class SingleGameRatingGenerator():
 
                     filtered_rows = self.get_filtered_rows(column_name_equal_to,equal_to_value,updated_game_single_player) ### CURRENTLY DOES NOT HANDLE MULTPLE DIFFERNT FILTERS
                     backup_value = self.get_backup_value(player_id,time_weight_name,self.player_time_weight_methods)
-
-
-
 
                     EstimatedValueObject = EstimatedValueGenerator(rating_method,filtered_rows, backup_value, self.start_date_time,column_name)
                     time_estimated_value = EstimatedValueObject.get_estimated_value()
@@ -164,31 +176,26 @@ class SingleGameRatingGenerator():
             region = self.team_regions[team_id]
         else:
             region = "unknown"
-        start_rating_region = {'Europe': 1200, 'Africa': -900, 'Asia': 0,
-                               'North America': 950, 'South America': 0,
+        start_rating_region = {'Europe': 1800, 'Africa': -900, 'Asia': 0,
+                               'North America': 940, 'South America': 0,
                                'Middle East': 100, 'Oceania': -200, 'Brazil': 500,
-                               'unknown': 0}
+                               None: 0}
 
         if region not in start_rating_region:
             print(region, "not in region")
-            region = 400
-        else:
-            start_rating = start_rating_region[region]
+            region = None
 
-        #updated_all_game_all_player = self.all_game_all_player[self.all_game_all_player['is_rating_updated']==1]
-       # equal_to_rows = get_rows_where_column_equal_to( updated_all_game_all_player , region ,"region")
-       # min_date = self.start_date_time- pd.DateOffset(months=6)
-        #equal_to_rows_date = get_rows_where_column_larger_than(equal_to_rows,min_date,"start_date_time")
-        #active_players_region = get_number_of_unique_values(         equal_to_rows_date,"player_id")
 
         region_level_rows = self.all_player[
             ( self.all_player['region'] == region)
             & ( self.all_player['time_weight_rating'] !="")
-            & (self.all_player['time_weight_rating_certain_ratio'] >0.18)
+            & (self.all_player['time_weight_rating_certain_ratio'] >0.06)
             ]
 
-        if len(region_level_rows) >= 90:
-            start_rating = region_level_rows.time_weight_rating.quantile(0.1)
+        min_new_player_start_date_time = pd.to_datetime("2016-01-01")
+
+        if len(region_level_rows) >= 30 and self.start_date_time > min_new_player_start_date_time:
+            start_rating = region_level_rows['time_weight_rating'].quantile(0.22)
         else:
             start_rating = start_rating_region[region]
 
@@ -197,8 +204,6 @@ class SingleGameRatingGenerator():
 
         if  self.get_it_player_is_female_or_staff(team_name) is True:
             start_rating -= 2500
-
-
 
         return start_rating
 
@@ -222,12 +227,17 @@ class SingleGameRatingGenerator():
     def update_expected_kill_percentage(self):
         for team_id in self.team_player_ids:
             sum_team_kpr = 0
+            sum_team_map_kpr = 0
             for player_id in self.team_player_ids[team_id]:
                 sum_team_kpr += self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+                sum_team_map_kpr += self.single_game_stored_player_values[player_id]['map_time_weighted_opponent_adjusted_kpr']
             for player_id in self.team_player_ids[team_id]:
                 expected_kill_percentage = self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']/sum_team_kpr
+                expected_kill_map_percentage = self.single_game_stored_player_values[player_id][
+                                               'map_time_weighted_opponent_adjusted_kpr'] / sum_team_map_kpr
                 index =          self.player_id_to_player_index[player_id]
                 self.all_game_all_player.at[index,'expected_kill_percentage'] = expected_kill_percentage
+                self.all_game_all_player.at[index, 'expected_kill_map_percentage'] = expected_kill_map_percentage
 
     def update_all_player(self,player_id):
 
@@ -235,8 +245,9 @@ class SingleGameRatingGenerator():
             self.single_game_stored_player_values[player_id]['time_weight_rating_certain_ratio']
         self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weight_rating'] = \
         self.single_game_stored_player_values[player_id]['time_weight_rating']
-        self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weighted_opponent_adjusted_kpr'] = \
-            self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+        if 'time_weighted_opponent_adjusted_kpr' in self.single_game_stored_player_values[player_id]:
+            self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weighted_opponent_adjusted_kpr'] = \
+                self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
 
 
 
@@ -271,7 +282,7 @@ class SingleGameRatingGenerator():
 
 
     def calculcate_opponent_adjusted_kpr(self,single_game_all_player):
-        standard_rating = 1500
+        standard_rating = 3000
         factor = 0.000052
         return single_game_all_player['kpr'] + (single_game_all_player['opponent_time_weight_rating'] - standard_rating) * factor
 

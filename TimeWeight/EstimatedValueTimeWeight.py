@@ -8,6 +8,7 @@ class EstimatedValueGenerator():
         self.rating_method = rating_method
         self.updated_game_single_player = game_single_player
         self.backup_value = backup_value
+
         self.start_date_time = start_date_time
         self.stored_values = {
             'rating':None,
