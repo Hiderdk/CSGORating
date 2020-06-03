@@ -199,8 +199,6 @@ class SingleGameRatingGenerator():
         else:
             start_rating = start_rating_region[region]
 
-        if start_rating < -2000:
-            print(start_rating, region, len(region_level_rows))
 
         if  self.get_it_player_is_female_or_staff(team_name) is True:
             start_rating -= 2500

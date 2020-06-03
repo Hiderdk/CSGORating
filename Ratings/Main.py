@@ -1,7 +1,6 @@
 from SQL import *
 from settings import *
-from Functions.Lists import *
-from Functions.Miscellaneous import *
+
 from Ratings.PerformanceRating import *
 from Ratings.SingleGame import SingleGameRatingGenerator
 from Functions.ChangeDataFrame import *
@@ -193,12 +192,30 @@ class RatingGenerator():
 
     def create_game_team(self,all_game_all_player):
         group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
-        self.all_game_all_team = all_game_all_player.groupby(['opponent_region','rounds_won','rounds_lost','team_id','team_id_opponent','game_id','start_date_time','game_number','series_id'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
+        self.all_game_all_team = all_game_all_player.groupby(
+            ['opponent_region','rounds_won','rounds_lost','team_id','team_id_opponent','game_id','start_date_time','game_number','series_id','format'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
-        self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
+        #self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
         self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
-        sub_df = self.all_game_all_team[['time_weight_rating','game_id','team_id_opponent']].rename(columns={"time_weight_rating":"opponent_time_weight_rating"})
+        self.all_game_all_team['lost'] = -self.all_game_all_team['won']+1
+        sub_df = self.all_game_all_team[['time_weight_rating_certain_ratio','time_weight_rating','game_id','team_id_opponent']].\
+            rename(columns={"time_weight_rating":"opponent_time_weight_rating","time_weight_rating_certain_ratio":"opponent_time_weight_rating_certain_ratio"})
+
         self.all_game_all_team = pd.merge(sub_df,self.all_game_all_team,left_on=['game_id','team_id_opponent'],right_on=['game_id','team_id'])
+        self.all_series_all_team = self.all_game_all_team.groupby(['team_id','series_id','format'])[['opponent_adjusted_performance_rating']].mean().reset_index()
+        game1all = self.all_game_all_team[self.all_game_all_team['game_number']==1][['time_weight_rating',
+                                                                                      "opponent_time_weight_rating",
+                                                                                      "opponent_time_weight_rating_certain_ratio",
+                                                                                      'time_weight_rating_certain_ratio','series_id','team_id','won','lost']]
+        sup_grouped = game1all.groupby(['series_id','team_id'])[['time_weight_rating',
+                                                                                      "opponent_time_weight_rating",
+                                                                                      "opponent_time_weight_rating_certain_ratio",
+                                                                                      'time_weight_rating_certain_ratio']].mean().reset_index()
+        self.all_series_all_team = pd.merge(sup_grouped, self.all_series_all_team, on=['series_id', 'team_id'])
+
+        sup_sum= game1all.groupby(['series_id','team_id'])[['won','lost']].sum().reset_index()
+        self.all_series_all_team = pd.merge(sup_sum, self.all_series_all_team, on=['series_id', 'team_id'])
+
 
         return self.all_game_all_team
 
@@ -320,14 +337,9 @@ class RatingGenerator():
 
 
 if __name__ == '__main__':
-    from TimeWeight.timeweightconfigurations import player_time_weight_methods
-    configurations = {
-        'player_time_weight_methods':player_time_weight_methods
-    }
-
 
     newest_games_only =False
     min_date = "2015-07-01"
-    AllGames = RatingGenerator(newest_games_only=False,min_date="2015-07-01",configurations=configurations)
+    AllGames = RatingGenerator(newest_games_only=False,min_date="2015-07-01")
 
     AllGames.main()

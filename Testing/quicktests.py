@@ -12,11 +12,17 @@ df_file_name = "all_game_all_player_rating"
 dft = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['start_date_time','game_number'],ascending=[True,True])
 q = dft[dft['player_name'].str.lower()=='acor'].sort_values(by='start_date_time',ascending=False).head(10)
 
-dft[dft['player_name']=='ottoNd']
-
 df_file_name = "all_game_all_team_rating"
 df = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by='start_date_time',ascending=False)
 
+df['rating_difference'] = df['time_weight_rating']-df['opponent_time_weight_rating']
+
+rows = df[df['rating_difference'].between(500,960)]
+
+rows['round_difference'] = rows['rounds_won']-rows['rounds_lost']
+
+q = rows[(rows['round_difference'] > 3.5)]
+print(len(q)/len(rows))
 
 q = df[(df['team_name']=='c0ntact')&(df['start_date_time']>'2020-01-15')]
 q['rounds_difference'] = df['rounds_won']-df['rounds_lost']
