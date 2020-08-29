@@ -2,18 +2,31 @@ import pandas as pd
 filepath_dataframes =r"C:\Users\Mathias\PycharmProjects\Ratings\Files"
 import math
 
-#df_file_name = "all_team"
-#dft = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['time_weight_rating'],ascending=[False])
 #dft = dft[dft['most_recent_date']>'2020-01-01']
 #print(dft[['team_name','time_weight_rating','most_recent_date']].head(35))
 
 
 df_file_name = "all_game_all_player_rating"
-dft = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['start_date_time','game_number'],ascending=[True,True])
-q = dft[dft['player_name'].str.lower()=='acor'].sort_values(by='start_date_time',ascending=False).head(10)
+dft = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['start_date_time','game_number'],ascending=[False,False])
+q = dft[dft['player_name'].str.lower()=='hades'].sort_values(by='start_date_time',ascending=False).head(10)
+v = dft.head(50)
+v = dft[dft['player_name']=='hades'].head(10)
 
 df_file_name = "all_game_all_team_rating"
 df = pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by='start_date_time',ascending=False)
+
+
+v = df[df['team_name']=='Wisła Kraków']
+
+
+
+v = df.head(1)
+dft['rounds_difference'] = dft['rounds_won']-dft['rounds_lost']
+h = dft[(dft['start_date_time']>'2020-04-22')&(dft['team_name']=='BIG')]
+
+print(h[['opponent_adjusted_performance_rating','rounds_difference','opponent_time_weight_rating','won']].mean())
+
+
 
 df['rating_difference'] = df['time_weight_rating']-df['opponent_time_weight_rating']
 

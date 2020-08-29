@@ -107,7 +107,7 @@ class KillsScenarioProbabilityGenerator():
         }
         google_sheet_player_kill_over_dict['Predictions'].append("Estimated Kill Percentage")
         google_sheet_player_kill_over_dict['Predictions'].append("Estimated Kills")
-        for kill in range(12,25):
+        for kill in range(12,24):
            google_sheet_player_kill_over_dict['Predictions'].append("Over " + str(kill+0.5))
 
         for team in self.team_players:
@@ -122,7 +122,7 @@ class KillsScenarioProbabilityGenerator():
                 google_sheet_player_kill_over_dict[player].append(estimated_kill_percentage)
                 google_sheet_player_kill_over_dict[player].append(estimated_player_kill)
 
-                for kill in range(12, 25):
+                for kill in range(12, 24):
                     rows = player_df[player_df['player_kills']>kill]
                     sum = rows['scenario_probability'].sum()
                     percentage_prob = str(round(sum*100,0)) + "%"

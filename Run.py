@@ -9,8 +9,3 @@ SeriesPrediction = SeriesPredictionGenerator(calculcate_win_probabilities=True)
 SeriesPrediction.load_data()
 SeriesPrediction.main()
 
-round_player_weapon = {
-    'steam_id':[1,2,4,],
-    'weapon_name':['Ak47','M4a1','AWP']
-}
-

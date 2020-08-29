@@ -17,6 +17,7 @@ class RatingGenerator():
                  max_date="2030-01-01",
                  insert_final_file=True,
                  parameter_configuration=player_time_weight_methods,
+                 start_rating_quantile=0.1,
                  verbose=True
                  ):
 
@@ -26,6 +27,7 @@ class RatingGenerator():
         self.max_date = max_date
         self.insert_final_file = insert_final_file
         self.min_date = min_date
+        self.start_rating_quantile = start_rating_quantile
         self.all_team_dict = {
             'team_id': [],
             'team_name': [],
@@ -82,7 +84,7 @@ class RatingGenerator():
 
             series_ids = get_unique_values_from_column_in_list_format(self.all_game_all_player, "series_id")
         try:
-            self.all_game_all_player =     self.all_game_all_player.sort_values(by='start_date_time',ascending=True)
+            self.all_game_all_player =     self.all_game_all_player.sort_values(by=['start_date_time','game_number'],ascending=True)
 
         except AttributeError: ## No NEW GAMES
             pass
@@ -111,7 +113,8 @@ class RatingGenerator():
 
     def insert_files(self,extra_name=""):
         self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
-        insert_df = self.all_game_all_player[np.isfinite(self.all_game_all_player['rating'])]
+        insert_df = self.all_game_all_player[np.isfinite(self.all_game_all_player['time_weight_rating'])]
+
         insert_df.to_pickle(local_file_path +"\\" + extra_name + "all_game_all_player_rating")
         self.all_player.to_pickle(local_file_path +"\\" + extra_name + "all_player")
         self.all_team.to_pickle(local_file_path +"\\" + extra_name + "all_team")
@@ -141,7 +144,7 @@ class RatingGenerator():
 
     def get_newest_all_game_all_player(self):
         most_recent_date = \
-        self.previous_all_game_all_player.sort_values(by='start_date_time', ascending=False).head(1)['start_date_time'].iloc[0]
+        self.previous_all_game_all_player.sort_values(by=['start_date_time','game_number'], ascending=False).head(1)['start_date_time'].iloc[0]
         series_ids = get_all_series_ids(most_recent_date)['series_id'].unique().tolist()
         unique_series_ids = list(set(series_ids) - set(self.previous_all_game_all_player['series_id'].unique().tolist()))
         self.new_all_game_all_player = get_all_game_all_player_from_series_ids(unique_series_ids)
@@ -165,8 +168,8 @@ class RatingGenerator():
         all_game_all_player['is_rating_updated'] = 0
         all_game_all_player = add_game_player_simple_ratings(all_game_all_player)
         all_game_all_player['predicted_adr'] = calculcate_predicted_adr(all_game_all_player)
-        all_game_all_player['rating'] = calculcate_predicted_adr(all_game_all_player)
-        all_game_all_player['opponent_adjusted_kpr'] = calculcate_predicted_adr(all_game_all_player)
+        #all_game_all_player['rating'] = calculcate_predicted_adr(all_game_all_player)
+       # all_game_all_player['opponent_adjusted_kpr'] = calculcate_predicted_adr(all_game_all_player)
         all_game_all_player['net_adr'] = all_game_all_player['adr']-all_game_all_player['predicted_adr']
         all_game_all_player['net_adr'] = all_game_all_player['net_adr'].fillna(0)
         all_game_all_player['performance_rating'] = add_performance_rating(all_game_all_player)
@@ -193,7 +196,7 @@ class RatingGenerator():
     def create_game_team(self,all_game_all_player):
         group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
         self.all_game_all_team = all_game_all_player.groupby(
-            ['opponent_region','rounds_won','rounds_lost','team_id','team_id_opponent','game_id','start_date_time','game_number','series_id','format'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
+            ['opponent_region','rounds_won','rounds_lost','team_id','team_name','team_id_opponent','game_id','start_date_time','game_number','series_id','format'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         #self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
         self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
@@ -250,7 +253,7 @@ class RatingGenerator():
         print(vg[['time_weight_rating', 'time_weight_rating_certain_ratio', 'player_name']].dropna().head(20))
         self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
         vt = self.all_team.sort_values(by='time_weight_rating', ascending=False)
-        print(vt[['time_weight_rating', 'team_name']].dropna().head(20))
+        print(vt[['time_weight_rating', 'team_name']].dropna().head(40))
 
     def insert_to_all_team(self, single_series_all_player):
         team_ids = single_series_all_player['team_id'].unique().tolist()
@@ -327,7 +330,7 @@ class RatingGenerator():
 
                 team_player_ids = get_team_player_dictionary(single_game_all_player, "team_id", "player_id")
                 SingleGame = SingleGameRatingGenerator(team_ids,team_player_ids,start_date_time,self.all_game_all_player,self.all_player,self.parameter_configuration,
-                                                       update_dataframe=True,single_game_all_player=single_game_all_player,map_names=[map])
+                                                       update_dataframe=True,single_game_all_player=single_game_all_player,map_names=[map],start_rating_quantile=self.start_rating_quantile)
 
                 self.all_game_all_player,self.all_player = SingleGame.calculcate_ratings()
 

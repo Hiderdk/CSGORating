@@ -45,15 +45,25 @@ def delete_old_sheets(workbook_name, new_game_ids):
     workbook = file.open(workbook_name)
 
     for sheet_name in sheet_names:
-        if sheet_name not in new_game_ids and sheet_name != 'team_ratings' and sheet_name != 'Schedule':
-            workbook.del_worksheet(workbook.worksheet(sheet_name))
-
+        if sheet_name not in new_game_ids and sheet_name != 'team_ratings' and sheet_name != 'Schedule' and sheet_name != 'TeamRank' and sheet_name !='PlayerRank':
+            try:
+                workbook.del_worksheet(workbook.worksheet(sheet_name))
+            except gspread.exceptions.WorksheetNotFound:
+                pass
+            except gspread.exceptions.APIError:
+                time.sleep(100)
+                workbook.del_worksheet(workbook.worksheet(sheet_name))
 
 def read_google_sheet(sheet_name,workbook_name):
-    file = gspread.authorize(credentials)
-    sheet = file.open(workbook_name).worksheet(sheet_name)
-    data = sheet.get_all_values()
-    headers = data.pop(0)
+    for i in range(3):
+        try:
+            file = gspread.authorize(credentials)
+            sheet = file.open(workbook_name).worksheet(sheet_name)
+            data = sheet.get_all_values()
+            headers = data.pop(0)
+            break
+        except gspread.exceptions.APIError:
+            time.sleep(60)
 
     df = pd.DataFrame(data, columns=headers)
     return df

@@ -2,6 +2,7 @@ from settings import *
 from SQL import *
 import datetime
 
+
 from Functions.Lists import *
 from Ratings.SingleGame import SingleGameRatingGenerator
 
@@ -11,7 +12,7 @@ from Functions.AverageValues import create_average_over_under_df
 from TimeWeight.timeweightconfigurations import player_time_weight_methods
 from Functions.Miscellaneous import scale_features_and_insert_to_dataframe
 
-MAXDAYCOUNTSHEET = 3
+MAXDAYCOUNTSHEET = 9
 ot_default_probability = 0.093
 
 covered_tournaments = ['ESL Pro League Season 11 North America']
@@ -50,16 +51,25 @@ class SeriesPredictionGenerator():
 
     def load_data(self):
         self.all_game_all_team = pd.read_pickle(
-            local_file_path + "//all_game_all_team_rating").sort_values(by='start_date_time',
-                                                                                      ascending=False)
-        self. all_game_all_player = pd.read_pickle(local_file_path+"//all_game_all_player_rating").sort_values(by='start_date_time',ascending=False)
+            local_file_path + "//all_game_all_team_rating").sort_values(by=['start_date_time','game_number'],
+                                                                                      ascending=[False,False])
+        self. all_game_all_player = pd.read_pickle(local_file_path+"//all_game_all_player_rating").sort_values(by=['start_date_time','game_number'],ascending=False)
         self.all_game_all_player = self.all_game_all_player[self.all_game_all_player['opponent_region'].notna()]
 
 
         self.all_player = pd.read_pickle(local_file_path + "//all_player")
         self.all_team = pd.read_pickle(local_file_path + "//all_team")
+
+        import time
+        st = time.time()
+        for index,row in self.all_team.iterrows():
+            team_id = row['team_id']
+            team_name = row['team_name']
+            self.all_game_all_team.loc[self.all_game_all_team['team_id_opponent_y']==team_id,'team_name_opponent'] = team_name
+
+        print(time.time()-st)
         min_date =datetime.datetime.now()- datetime.timedelta(0.2)
-        pre_series_player = get_all_from_series_player(min_date).sort_values(by='start_date_time',ascending=True)
+        pre_series_player = get_all_from_series_player(min_date).sort_values(by=['start_date_time'],ascending=True)
         historical_series_ids =  self.all_game_all_player ['series_id'].unique().tolist()
         self.future_series_player = pre_series_player[~pre_series_player.series_id.isin(        historical_series_ids)]
 
@@ -67,6 +77,10 @@ class SeriesPredictionGenerator():
 
 
     def main(self):
+        min_date= datetime.datetime.today() - datetime.timedelta(2 * 30)
+        insert_team = self.all_team[self.all_team['most_recent_date']>min_date].sort_values(by='time_weight_rating',ascending=False).head(50)[['team_name','time_weight_rating']]
+        append_df_to_sheet(round(insert_team,0),"TeamRank",self.workbook_name)
+
 
         series_ids = self.future_series_player['series_id'].unique().tolist()
 
@@ -141,8 +155,6 @@ class SeriesPredictionGenerator():
             historical_team_stats_df = pd.DataFrame.from_dict(historical_team_stats_dict)
 
 
-
-
             index_perf = historical_team_stats_dict['Team Stats'].index("Recent Performance Rating")
             index_perf_ago = historical_team_stats_dict['Team Stats'].index("Recent Days Ago")
             self.schedule_dict['Date'].append(start_date_time)
@@ -169,7 +181,6 @@ class SeriesPredictionGenerator():
                     clear_sheet(sheet_name, self.workbook_name)
                 except Exception:
                     pass
-                append_df_to_sheet(historical_team_stats_df, sheet_name, self.workbook_name, row_number=1, column_number=13)
 
                 if self.is_over_under_kill_series(start_date_time,team_ratings,single_series_all_player) is True:
 
@@ -185,23 +196,41 @@ class SeriesPredictionGenerator():
                     over_under_variations_df = KillsScenarioProbability.create_over_under_variations(scenario_df)
 
 
-                    historical_over_df = create_average_over_under_df(self.all_game_all_player, team_player_ids,
-                                                                      player_id_to_player_name, months_back=4,
-                                                                      name='4M Stats')
+                    #historical_over_df = create_average_over_under_df(self.all_game_all_player, team_player_ids,
+                   #                                                   player_id_to_player_name, months_back=4,
+                   #                                                   name='4M Stats')
 
 
-                    estimated_team_kills = self.get_estimated_team_kills(scenario_df,team_ids)
-                    map_kpr_df = self.create_map_kpr_df(player_id_to_player_name,team_player_ids, SingleGame.single_game_stored_player_values,
-                                                        estimated_team_kills)
+                  #  estimated_team_kills = self.get_estimated_team_kills(scenario_df,team_ids)
+
+                   # map_kpr_df = self.create_map_kpr_df(player_id_to_player_name,team_player_ids, SingleGame.single_game_stored_player_values,
+                    #                                    estimated_team_kills)
 
 
                     try:
 
-                        append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
-                        append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name)
-                        append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+                        #append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
+                        append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name,row_number=4,column_number=1)
+                        #append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+                        pass
                     except Exception as e:
                         print(e)
+
+                for team_number, team_id in enumerate(team_ids):
+                    append_df_to_sheet(round(self.team_results[team_id],0), sheet_name=sheet_name,
+                                       workbook_name=self.workbook_name, row_number=21 + team_number * 19)
+                append_df_to_sheet(historical_team_stats_df, sheet_name, self.workbook_name, row_number=1, column_number=13)
+                player_ratings_dict = {
+                    'Players':['Rating']
+                }
+
+
+                for player_id in SingleGame.single_game_stored_player_values:
+                    player_name = self.all_player[self.all_player['player_id']==player_id]['player_name'].iloc[0]
+                    player_ratings_dict[player_name] = [round(SingleGame.single_game_stored_player_values[player_id]['time_weight_rating'],0)]
+                append_df_to_sheet(pd.DataFrame.from_dict(player_ratings_dict),sheet_name,workbook_name=self.workbook_name,row_number=1,column_number=1)
+
+
 
         delete_old_sheets(self.workbook_name,sheet_names)
         clear_sheet("Schedule",self.workbook_name)
@@ -260,8 +289,10 @@ class SeriesPredictionGenerator():
         min_date_4_months = datetime.datetime.now() - datetime.timedelta(4 * 365 / 12)
         filtered_game_all_team_4_months = self.all_game_all_team[self.all_game_all_team['start_date_time'] > min_date_4_months]
         filtered_game_all_player_4_months = self.all_game_all_player[self.all_game_all_player['start_date_time'] > min_date_4_months]
-        self.all_game_all_team['games_played'] = self.all_game_all_team.groupby(['team_id']).cumcount() + 1
+        self.all_game_all_team['games_played'] = self.all_game_all_team.groupby(['team_name']).cumcount() + 1
         self.all_game_all_player['games_played'] = self.all_game_all_player.groupby(['player_id']).cumcount() + 1
+
+
         filtered_game_all_player_12_games =   self.all_game_all_player[  self.all_game_all_player['games_played']<12]
         win_rates_4_month =[]
         average_kills_4_month = []
@@ -270,10 +301,20 @@ class SeriesPredictionGenerator():
         last_15_games_performance_rating = []
         average_performance_rating_recents = []
         recent_game_counts = []
+        self.team_results = {}
 
         for number,team_id in enumerate(team_ids):
 
-            filtered_game_single_team_4_months =filtered_game_all_team_4_months[filtered_game_all_team_4_months['team_id']==team_id].sort_values(by='start_date_time',ascending=False)
+            filtered_team_20_games = self.all_game_all_team[(self.all_game_all_team['games_played']<18)&(self.all_game_all_team['team_name']==team_names[number])]
+
+            self.team_results[team_id] = filtered_team_20_games[['start_date_time','team_name_opponent','time_weight_rating','opponent_time_weight_rating',
+                                                                 'rounds_won','rounds_lost','won','opponent_adjusted_performance_rating']].sort_values(by=['start_date_time'],ascending=False)
+
+            self.team_results[team_id] = self.team_results[team_id].rename(columns={'time_weight_rating':'rating','opponent_time_weight_rating':'opponent_rating','opponent_adjusted_performance_rating':'match_rating'})
+
+
+
+            filtered_game_single_team_4_months =filtered_game_all_team_4_months[filtered_game_all_team_4_months['team_name']==team_names[number]].sort_values(by=['start_date_time','game_number'],ascending=False)
 
             win_rates_4_month.append(round(filtered_game_single_team_4_months['won'].mean(),2))
             average_kills_4_month.append(round(filtered_game_single_team_4_months['kills'].mean(),1))
@@ -314,6 +355,7 @@ class SeriesPredictionGenerator():
         for player_id in players:
             player_rows= df[df['player_id']==player_id]
             player_performance_ratings = []
+            days_ago = 0
             for index,row in player_rows.iterrows():
                 days_ago = (current_date-row['start_date_time']).days
 
@@ -327,8 +369,10 @@ class SeriesPredictionGenerator():
                 team_means.append(average_player_performance)
 
             sum_date_count+=days_ago
-
-        average_team_mean = sum(team_means)/len(team_means)
+        if len(team_means) ==0:
+           return None,None
+        else:
+            average_team_mean = sum(team_means)/len(team_means)
 
         return int(round(average_team_mean,0)),int(round(sum_date_count/5,0))
 
@@ -341,8 +385,8 @@ class SeriesPredictionGenerator():
         return sum_team_mean/5
 
     def is_over_under_kill_series(self,start_date_time,team_ratings,single_series_all_player):
-        max_days_in_future_player_kills = 4
-        min_average_rating_player_kills = 2300
+        max_days_in_future_player_kills = 7
+        min_average_rating_player_kills = 2400
         prize_pool = single_series_all_player['prize_pool'].iloc[0]
         is_offline = single_series_all_player['is_offline'].iloc[0]
         tournament_name = single_series_all_player['is_offline'].iloc[0]
@@ -360,10 +404,19 @@ class SeriesPredictionGenerator():
         for team_id,player_ids in team_player_ids.items():
             team_estimated_kprs = []
             team_estimated_map_kprs = []
+            raw_estimated_kprs = []
+            adjustment_bonus = []
             player_names = []
             for player_id in player_ids:
-                estimated_kpr = SingleGame.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']
+                adjustment_bonus.append(SingleGame.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']-
+                                        SingleGame.single_game_stored_player_values[player_id]['time_weighted_kpr'])
+                raw_estimated_kprs.append(SingleGame.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr'])
 
+            average_adjustment_bonus = sum(adjustment_bonus)/len(adjustment_bonus)
+
+            for player_number,player_id in enumerate(player_ids):
+
+                estimated_kpr = raw_estimated_kprs[player_number]-average_adjustment_bonus
                 team_estimated_kprs.append(estimated_kpr)
                 team_estimated_map_kprs.append(estimated_kpr)
                 player_name = player_id_to_player_name[player_id]

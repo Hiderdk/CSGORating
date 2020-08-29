@@ -31,7 +31,7 @@ class PlayerRoundWinsGenerator():
 
     def main(self):
         #self.load_model()
-        self.load_linear_model()
+      #  self.load_linear_model()
         self.standardize(self.new_df[self.feature_column_names])
         #self.predict_round_win_percentage_linear_regression()
         self.predict_round_win_percentage_own_method()
@@ -60,12 +60,6 @@ class PlayerRoundWinsGenerator():
                 (self.new_df['player_predicted_net_rounds_won'] + 16) + 16))/5
 
 
-    def predict_round_win_percentage_linear_regression(self):
-        X = self.new_df[self.feature_column_names]
-        X_standardized = self.standardize(X)
-        self.new_df['player_predicted_round_win_percentage'] = self.model.predict(     X_standardized )/5
-        h = self.new_df.head(200)
-        self.new_df.loc[self.new_df['player_predicted_round_win_percentage']<0,'player_predicted_round_win_percentage'] = 0
 
     def predict_round_win_percentage_own_method(self):
         X = self.new_df[self.feature_column_names]

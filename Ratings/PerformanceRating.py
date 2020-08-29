@@ -4,9 +4,9 @@ import pickle
 from sklearn import preprocessing
 performance_rating= {
     0:{
-        'column_name':'kpr','effect':1,'weight':0.45},
+        'column_name':'kpr','effect':1,'weight':0.47},
     1: {
-        'column_name': 'dpr', 'effect': -1, 'weight':0.34},
+        'column_name': 'dpr', 'effect': -1, 'weight':0.32},
     2: {
         'column_name': 'net_opening_duels_won',  'effect': 1, 'weight':0.06},
     3:{
@@ -18,10 +18,10 @@ def calculcate_predicted_adr(df):
     full_filepath = r"C:\Users\Mathias\PycharmProjects\StatisticalModels\adr"
     X_values = df[['kpr']]
     model = pickle.load(open(full_filepath, 'rb'))
-    scaler = preprocessing.StandardScaler()
-    standardized_X_values =  scaler.fit_transform(X_values)
+   #scaler = preprocessing.StandardScaler()
+    #standardized_X_values =  scaler.fit_transform(X_values)
 
-    return model.predict(standardized_X_values)
+    return model.predict(X_values)
 
 
 def add_game_player_simple_ratings(df):

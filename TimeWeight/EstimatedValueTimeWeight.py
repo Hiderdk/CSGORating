@@ -39,18 +39,26 @@ class EstimatedValueGenerator():
     def calculate_estimated_rating(self, certain_ratio, weighted_rating, backup_rating):
         return certain_ratio * weighted_rating + (1 - certain_ratio) * backup_rating
 
+
+    def calculcate_recency_weight(self,games_played,games_played_weight):
+        div_factor = 27
+        recency_weight_pre = (1/(1+10**(-games_played/div_factor))-0.5)*2
+        recency_weight = recency_weight_pre*(1-games_played_weight)
+        return recency_weight
+
     def calculate_certain_ratio(self, days_ago, games_played_weight):
         recency_div_factor = self.rating_method['games_played_div_factor'] / 2
         games_played = len(days_ago)
         if games_played == 0:
             return 0
+        recency_weight = self.calculcate_recency_weight(games_played,games_played_weight)
 
         games_played_ratio = (1 / (1 + 10 ** (-games_played / self.rating_method['games_played_div_factor'])) - 0.5) * 2
         sum_date_ratio = sum(days_ago)
         recency_cv = (1 / (1 + 10 ** (- sum_date_ratio / recency_div_factor)) - 0.5) * 2
 
-        certain_ratio = games_played_weight * games_played_ratio + (1 - games_played_weight) * recency_cv
-        #### CREATE FUNCTION THAT has a ratio between 0 and 1. The more games played and the more recent they are the closer to 1 it is.
+        certain_ratio =(1-recency_weight) * games_played_ratio + recency_weight * recency_cv
+
         return certain_ratio
 
 

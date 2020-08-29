@@ -8,6 +8,9 @@ import math
 from TimeWeight.timeweightconfigurations import player_time_weight_methods
 
 
+
+
+
 class SingleGameRatingGenerator():
 
 
@@ -20,10 +23,11 @@ class SingleGameRatingGenerator():
                  player_time_weight_methods,
                  update_dataframe=False,
                  single_game_all_player=None,
+                 start_rating_quantile=0.22,
                  map_names=[]
                  ):
 
-
+        self.start_rating_quantile = start_rating_quantile
         self.update_dataframe = update_dataframe
         self.player_time_weight_methods = player_time_weight_methods
         self.single_game_all_player = single_game_all_player
@@ -195,7 +199,7 @@ class SingleGameRatingGenerator():
         min_new_player_start_date_time = pd.to_datetime("2016-01-01")
 
         if len(region_level_rows) >= 30 and self.start_date_time > min_new_player_start_date_time:
-            start_rating = region_level_rows['time_weight_rating'].quantile(0.22)
+            start_rating = region_level_rows['time_weight_rating'].quantile(self.start_rating_quantile)
         else:
             start_rating = start_rating_region[region]
 
