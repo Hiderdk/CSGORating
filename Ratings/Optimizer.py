@@ -121,9 +121,9 @@ for squared_performance_factor in [1.4]:
 
 
 
-                            print("logloss", min_logloss,europe_start_rating,na_start_rating,games_played_div_factor,start_rating_quantile,
-                                  performance_multiplier,squared_performance_factor,expected_player_percentage_contribution_beta,team_rating_prediction_beta)
-                            print(time.time()-st)
+                                print("logloss", min_logloss,europe_start_rating,na_start_rating,games_played_div_factor,start_rating_quantile,
+                                      performance_multiplier,squared_performance_factor,expected_player_percentage_contribution_beta,team_rating_prediction_beta)
+                                print(time.time()-st)
 
 
 
