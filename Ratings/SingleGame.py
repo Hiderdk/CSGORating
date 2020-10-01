@@ -24,9 +24,18 @@ class SingleGameRatingGenerator():
                  update_dataframe=False,
                  single_game_all_player=None,
                  start_rating_quantile=0.22,
+                 team_rating_prediction_beta=1500,
+                 expected_player_percentage_contribution_beta=18500,
+                 performance_multiplier=18500,
+                 squared_performance_factor=1,
+                 start_rating_regions = {'Europe': 1800, 'Africa': -900, 'Asia': 0,
+                               'North America': 940, 'South America': 0,
+                               'Middle East': 100, 'Oceania': -200, 'Brazil': 500,
+                               None: 0},
                  map_names=[]
                  ):
 
+        self.start_rating_regions = start_rating_regions
         self.start_rating_quantile = start_rating_quantile
         self.update_dataframe = update_dataframe
         self.player_time_weight_methods = player_time_weight_methods
@@ -44,6 +53,10 @@ class SingleGameRatingGenerator():
         self.single_game_stored_player_values = {}
         self.player_id_to_player_index = {}
         self.map_names = map_names
+        self.team_rating_prediction_beta = team_rating_prediction_beta
+        self.expected_player_percentage_contribution_beta = expected_player_percentage_contribution_beta
+        self.performance_multiplier = performance_multiplier
+        self.squared_performance_factor = squared_performance_factor
 
 
     def get_team_regions(self):
@@ -100,7 +113,7 @@ class SingleGameRatingGenerator():
             self.all_player.at[player_index,'start_time_weight_rating'] = start_rating
 
 
-        for time_weight_name in player_time_weight_methods:
+        for time_weight_name in self.player_time_weight_methods:
 
             rating_method = self.player_time_weight_methods[time_weight_name]
             column_name = self.player_time_weight_methods[time_weight_name]['column_name']
@@ -180,12 +193,9 @@ class SingleGameRatingGenerator():
             region = self.team_regions[team_id]
         else:
             region = "unknown"
-        start_rating_region = {'Europe': 1800, 'Africa': -900, 'Asia': 0,
-                               'North America': 940, 'South America': 0,
-                               'Middle East': 100, 'Oceania': -200, 'Brazil': 500,
-                               None: 0}
 
-        if region not in start_rating_region:
+
+        if region not in self.start_rating_regions:
             print(region, "not in region")
             region = None
 
@@ -201,7 +211,7 @@ class SingleGameRatingGenerator():
         if len(region_level_rows) >= 30 and self.start_date_time > min_new_player_start_date_time:
             start_rating = region_level_rows['time_weight_rating'].quantile(self.start_rating_quantile)
         else:
-            start_rating = start_rating_region[region]
+            start_rating = self.start_rating_regions[region]
 
 
         if  self.get_it_player_is_female_or_staff(team_name) is True:
@@ -260,26 +270,58 @@ class SingleGameRatingGenerator():
         single_game_indexes = single_game_all_player.index.tolist()
         team_number = -1
 
+        single_game_team_indexes = {}
         for team_id, player_ids in self.team_player_ids.items():
             single_game_single_team_all_player = single_game_all_player[single_game_all_player['team_id']==team_id]
             team_number+=1
-            single_game_team_indexes = single_game_single_team_all_player.index.tolist()
+            single_game_team_indexes[team_id] = single_game_single_team_all_player.index.tolist()
             opponent_team_id = self.team_ids[-team_number + 1]
-            self.all_game_all_player.at[single_game_team_indexes,'opponent_region'] =   self.team_regions[opponent_team_id]
+            self.all_game_all_player.at[single_game_team_indexes[team_id],'opponent_region'] =   self.team_regions[opponent_team_id]
 
-            self.all_game_all_player.at[single_game_team_indexes, 'opponent_time_weight_rating'] = \
+            self.all_game_all_player.at[single_game_team_indexes[team_id], 'opponent_time_weight_rating'] = \
                 self.team_ratings[opponent_team_id]
+
+        expected_team_performances = self.calculcate_expected_team_performances()
+
+        sum_squared_rounds_win_percentage = single_game_all_player['squared_rounds_win_percentage'].sum()/(len(single_game_all_player)/2)
+
+        single_game_all_player['adjusted_rounds_win_percentage'] = single_game_all_player['squared_rounds_win_percentage']/sum_squared_rounds_win_percentage
+        adjusted_rounds_win_percentage_list = single_game_all_player['adjusted_rounds_win_percentage'].tolist()
+        self.all_game_all_player.at[
+            single_game_indexes, 'adjusted_rounds_win_percentage'] = adjusted_rounds_win_percentage_list
+
+        #percentage_of_team = single_game_all_player['player_predicted_round_win_percentage'] / single_game_all_player[
+       #     'summed_player_round_win_percentage']
+        #net_difference = single_game_all_player['adjusted_rounds_win_percentage'] -single_game_all_player['summed_player_round_win_percentage']
+        #single_game_all_player['normalized_player_round_win_percentage'] = single_game_all_player[
+        #                                                            'player_predicted_round_win_percentage'] + net_difference * percentage_of_team
+
+
 
         game_id = self.single_game_all_player['game_id'].iloc[0]
         updated_single_game_all_player = self.all_game_all_player[self.all_game_all_player['game_id']==game_id]
-        opponent_adjusted_performance_ratings = self.calculcate_opponent_adjusted_performance_ratings(updated_single_game_all_player)
+        opponent_adjusted_performance_ratings,expected_player_performances,expected_player_percentage_contributions\
+            = self.calculcate_opponent_adjusted_performance_ratings(updated_single_game_all_player,expected_team_performances)
         opponent_adjusted_kpr = self.calculcate_opponent_adjusted_kpr(updated_single_game_all_player)
         self.all_game_all_player.at[
             single_game_indexes, "opponent_adjusted_kpr"] = opponent_adjusted_kpr
         self.all_game_all_player.at[
                 single_game_indexes, "opponent_adjusted_performance_rating"] = opponent_adjusted_performance_ratings
-        self.all_game_all_player['net_opponent_adjusted_performance_rating'] = \
-            self.all_game_all_player[ 'opponent_adjusted_performance_rating'] - self.all_game_all_player['rating']
+        self.all_game_all_player.at[
+                single_game_indexes, "expected_player_performances"] = expected_player_performances
+        self.all_game_all_player.at[
+            single_game_indexes, "expected_player_percentage_contribution"] = expected_player_percentage_contributions
+
+        for team_id,indexes in single_game_team_indexes.items():
+            self.all_game_all_player.at[
+                indexes, "expected_team_performance"] = expected_team_performances[team_id]
+
+
+
+       # self.all_game_all_player['net_opponent_adjusted_performance_rating'] = \
+         #   self.all_game_all_player[ 'opponent_adjusted_performance_rating'] - self.all_game_all_player['time_weight_rating']
+
+
 
 
 
@@ -288,15 +330,75 @@ class SingleGameRatingGenerator():
         factor = 0.000052
         return single_game_all_player['kpr'] + (single_game_all_player['opponent_time_weight_rating'] - standard_rating) * factor
 
-    def calculcate_opponent_adjusted_performance_ratings(self,single_game_all_player):
-        performance_multiplier = 18500
 
-        net_performance_ratings = single_game_all_player["normalized_player_round_win_percentage"].astype(
-            'float64') + 0.4
-        # single_game_rows =  all_game_all_player.iloc[ self.single_game_indexes]
+    def calculcate_expected_team_performances(self):
+        expected_team_performances = {}
+        expected_team_performances_list = []
+        teams = [t for t in self.team_ratings]
+        for number,team in enumerate(teams):
 
-        return np.log((net_performance_ratings) / (1 - (net_performance_ratings))) * performance_multiplier + \
-               single_game_all_player['opponent_time_weight_rating']
+            opponent_team = teams[-number+1]
+
+            team_rating = self.team_ratings[team]
+            opponent_rating = self.team_ratings[opponent_team]
+            rating_difference = team_rating - opponent_rating
+            #expected_team_performance_raw = (1 / (1 + 10 ** (-rating_difference / self.team_rating_prediction_beta)))**self.squared_performance_factor
+            expected_team_performance_raw = (1 / (1 + 10 ** (-rating_difference / self.team_rating_prediction_beta)))
+            expected_team_performances_list.append(expected_team_performance_raw)
+
+        for number, team in enumerate(teams):
+            expected_team_performances[team] = expected_team_performances_list[number]/sum(expected_team_performances_list)
+
+        return expected_team_performances
+
+    def calculcate_opponent_adjusted_performance_ratings(self, single_game_all_player,expected_team_performances):
+      #  expected_player_percentage_contribution_beta = self.rating_model_parameters[
+       #     'expected_player_percentage_contribution_beta']
+
+        expected_player_percentage_contributions = []
+        expected_player_performances = []
+        opponent_adjusted_performance_ratings= []
+        for index, row in single_game_all_player.iterrows():
+
+            team_id = row['team_id']
+            player_id = row['player_id']
+            player_percentage_contribution = row['player_percentage_contribution']
+
+            player_rating = self.single_game_stored_player_values[player_id]['time_weight_rating']
+            rating_difference_from_team = (player_rating - self.team_ratings[team_id])
+            expected_player_percentage_contribution = 1 / (1 + 10 ** (
+                    -rating_difference_from_team / self.expected_player_percentage_contribution_beta)) / 2.5
+            expected_player_percentage_contributions.append(expected_player_percentage_contribution)
+
+            expected_player_performance = expected_player_percentage_contribution * expected_team_performances[team_id]
+            expected_player_performances.append(expected_player_performance)
+            player_performance = player_percentage_contribution * row['adjusted_rounds_win_percentage']
+            net = player_performance - expected_player_performance
+
+            # unlogged_expected_player_performances.append(np.log((expected_player_performance+0.4) / (1 - (expected_player_performance+0.4))))
+            #  unlogged_player_performances.append(np.log(
+            #    (player_performance+0.4) / (1 - (player_performance+0.4))))
+
+          #  self.all_game_all_player.at[
+            #    index, 'player_percentage_contribution'] = player_percentage_contribution
+
+          #  self.all_game_all_player.at[
+              #  index, 'expected_player_percentage_contribution'] = expected_player_percentage_contribution
+
+
+            opponent_adjusted_performance_rating = net * self.performance_multiplier + player_rating
+            opponent_adjusted_performance_ratings.append(opponent_adjusted_performance_rating)
+        return opponent_adjusted_performance_ratings,expected_player_performances,expected_player_percentage_contributions
+
+    def calculcate_opponent_adjusted_performance_ratings_old_method(self, single_game_all_player):
+
+
+            net_performance_ratings = single_game_all_player["normalized_player_round_win_percentage"].astype(
+                'float64') + 0.4
+            # single_game_rows =  all_game_all_player.iloc[ self.single_game_indexes]
+
+            return np.log((net_performance_ratings) / (1 - (net_performance_ratings))) * performance_multiplier + \
+                   single_game_all_player['opponent_time_weight_rating']
 
 
 

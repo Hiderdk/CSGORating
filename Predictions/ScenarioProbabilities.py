@@ -12,8 +12,9 @@ class KillsScenarioProbabilityGenerator():
 
 
         self.ml_models_dict = {
-            'kills': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo"),
-            'kills_scaled': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo_scaled"),
+           # 'kills': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo"),
+            #'kills_scaled': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\kills_csgo_scaled"),
+            'kills':pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\csgo_team_kills_model"),
             'net_round_wins_all_scaled':pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_all_scaled"),
             'net_round_wins_all': pd.read_pickle(
                 r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\total_kills_csgo_all"),
@@ -52,7 +53,7 @@ class KillsScenarioProbabilityGenerator():
 
 
     def generate_round_probabilities(self):
-        self.update_result_probabilities()
+        #self.update_result_probabilities()
 
         BinaryKillScenario = BinaryKillScenarioGenerator()
         for number,team in enumerate(self.team_players):
@@ -60,10 +61,10 @@ class KillsScenarioProbabilityGenerator():
                 'rating_difference':self.team_ratings[number]-self.team_ratings[-number+1]
             }
 
-            ml_model_scaled_data = self.ml_models_dict['kills_scaled']
+           # ml_model_scaled_data = self.ml_models_dict['kills_scaled']
             ml_model = self.ml_models_dict['kills']
-            scaled_values = scale_features_and_insert_to_dataframe(ml_model_scaled_data, unscaled_values)
-            team_kill_probabilities = ml_model.predict_proba(scaled_values)[0]
+            X = convert_dict_to_df(unscaled_values)
+            team_kill_probabilities = ml_model.predict_proba(X)[0]
             team_kills = ml_model.classes_
             sum_k = 0
             for team_kill_number,team_kill in enumerate(team_kills):

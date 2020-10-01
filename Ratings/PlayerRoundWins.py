@@ -8,9 +8,11 @@ import time
 
 class PlayerRoundWinsGenerator():
 
-    def __init__(self,df,target):
+    def __init__(self,df,target,squared_factor=1):
         self.df = df
         self.feature_column_names =   ['performance_rating']
+        self.squared_factor = squared_factor
+
 
         all_columns = self.feature_column_names.copy()
         all_columns.append(target)
@@ -72,12 +74,15 @@ class PlayerRoundWinsGenerator():
         #self.new_df['raw_normalized'] = (self.new_df['predicted_net_rounds_won']-min)/(max-min)
         #grouped_sum = self.new_df.groupby(['game_id','team_id'])['raw_normalized'].sum().reset_index()
         st = time.time()
-        print("start")
+        self.new_df['squared_rounds_win_percentage'] = self.new_df['rounds_win_percentage']**self.squared_factor
+
+
         self.new_df['summed_player_round_win_percentage']=self.new_df.groupby(['game_id','team_id'])['player_predicted_round_win_percentage'].transform('sum')
-        print("Done", time.time()-st)
-        percentage_of_team = self.new_df['player_predicted_round_win_percentage']/self.new_df['summed_player_round_win_percentage']
-        net_difference = self.new_df['rounds_win_percentage']-self.new_df['summed_player_round_win_percentage']
-        self.new_df['normalized_player_round_win_percentage'] = self.new_df['player_predicted_round_win_percentage']+net_difference*percentage_of_team
+        #print("Done", time.time()-st)
+        self.new_df['player_percentage_contribution']= self.new_df['player_predicted_round_win_percentage']/self.new_df['summed_player_round_win_percentage']
+
+        #net_difference = self.new_df['rounds_win_percentage']-self.new_df['summed_player_round_win_percentage']
+        #self.new_df['normalized_player_round_win_percentage'] = self.new_df['player_predicted_round_win_percentage']+net_difference*percentage_of_team
 
 
 if __name__ == '__main__':

@@ -54,5 +54,8 @@ class TimeWeightGenerator():
         return pre_weights.values / np.sum(pre_weights.values)
 
     def calculate_weighted_rating(self,metric_name):
-        return float((   self.new_df [metric_name] *         self.game_weights).sum())
+        if len(self.new_df) == 0:
+            return 0
+        else:
+            return float(( self.new_df [metric_name] * self.game_weights).sum())
 

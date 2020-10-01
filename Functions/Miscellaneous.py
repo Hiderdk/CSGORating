@@ -1,7 +1,13 @@
 import pandas as pd
 import datetime
 
+def convert_dict_to_df(data_dict):
+    new_dict = {}
 
+    for column,value in data_dict.items():
+        new_dict[column] = [value]
+
+    return pd.DataFrame.from_dict(new_dict)
 
 def scale_features_and_insert_to_dataframe(scaled_data, unscaled_values):
     scaled_features = {}
