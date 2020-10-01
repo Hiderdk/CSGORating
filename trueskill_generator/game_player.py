@@ -1,9 +1,10 @@
 from trueskill import win_probability
+import numpy as np
 
-
-def create_game_player_trueskill(df, env, start_ratings={}):
+def create_game_player_trueskill(df, env, start_rating_quantile,start_ratings={}):
     player_ratings = {}
-
+    region_players = {}
+    region_players_rating = {}
     game_ids = df['game_id'].unique().tolist()
     for game_id in game_ids:
 
@@ -13,14 +14,17 @@ def create_game_player_trueskill(df, env, start_ratings={}):
 
         team_ids = single_rows['team_id'].unique().tolist()
         single_game_player_ratings = {}
+        single_game_player_regions= {}
         single_game_player_ids = {}
         team_player_sigmas = {}
         team_player_mus = {}
         indexes = []
+
         for team_number,team_id in enumerate(team_ids):
 
-
             single_game_player_ratings[team_number] = []
+
+            single_game_player_regions[team_number] = []
 
 
 
@@ -32,11 +36,26 @@ def create_game_player_trueskill(df, env, start_ratings={}):
             for index, row in single_team_rows.iterrows():
                 indexes.append(index)
                 player_id = row['player_id']
+                region = row['region']
+                single_game_player_regions[team_number].append(region)
                 single_game_player_ids[team_id].append(player_id)
                 if player_id not in player_ratings:
-                    if start_ratings == {}:
-                        start_rating = 25
+                    if region not in region_players:
+                        region_players[region] = []
+                        region_players_rating[region] = []
+
+                    count_region_players = len(region_players_rating[region])
+                    if count_region_players > 60:
+                        start_rating = np.percentile(region_players_rating[region], start_rating_quantile)  #
+                    else:
+                        start_rating = start_ratings[region]
+
                     player_ratings[player_id] = env.Rating(start_rating)
+
+
+                    region_players[region].append(player_id)
+                    region_players_rating[region].append(start_rating)
+
 
 
                 single_game_player_ratings[team_number].append(player_ratings[player_id])
@@ -67,7 +86,11 @@ def create_game_player_trueskill(df, env, start_ratings={}):
         for team_id in  single_game_player_ids:
             team_number+=1
             for player_number,player_id in enumerate(single_game_player_ids[team_id]):
+                region = single_game_player_regions[team_number][player_number]
                 player_ratings[player_id] = new_ratings[team_number][player_number]
+
+                ix = region_players[region].index(player_id)
+                region_players_rating[ix] = player_ratings[player_id].mu
 
 
     all_game_all_team = df.groupby(['game_id','team_id','start_date_time','team_name','game_number','won'])[['prob','sigma','mu','opponent_mu','opponent_sigma']].mean().reset_index()

@@ -1,5 +1,5 @@
 from trueskill import win_probability
-def create_game_team_trueskill(df,trueskill,start_ratings={}):
+def create_game_team_trueskill(df,trueskill,start_rating_quantile,start_ratings={}):
     team_ratings = {}
 
     game_ids = df['game_id'].unique().tolist()

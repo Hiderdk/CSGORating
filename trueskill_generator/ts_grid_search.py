@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 filepath_dataframes =r"C:\Users\Mathias\PycharmProjects\Ratings\Files"
 df_file_name = "all_game_all_player_rating"
 all_game_all_player =  pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['start_date_time','game_number'])
-all_game_all_player = all_game_all_player[all_game_all_player['start_date_time'].between('2015-07-01','2016-04-01')]
+all_game_all_player = all_game_all_player[all_game_all_player['start_date_time'].between('2015-07-01','2016-07-01')]
 
 
 group_sum = all_game_all_player.groupby(['team_id', 'game_id'])['kills'].sum().reset_index()
@@ -38,9 +38,9 @@ start_rating = 25
 trueskill.setup(draw_probability=0)
 
 parameters = {
-    'sigma':[0.5,0.75,1,1.5,2],
-    'beta':[0.5,0.75,1,1.5,2],
-    'tau':[0.08,0.1,0.15]
+    'sigma':[4],
+    'beta':[6],
+    'tau':[0.02,0.03]
 }
 
 
@@ -57,7 +57,11 @@ def get_logloss(df):
     df['prob_lr'] = model.predict_proba(X)[:, 1]
     logloss_logistic = log_loss(y, df['prob_lr'])
 
-    return min (logloss_ts,logloss_logistic)
+    return logloss_ts,logloss_logistic
+
+start_rating_regions = {'Europe': 25, 'Africa': 25, 'Asia': 25,
+                        'North America': 25, 'South America': 25,
+                        'Middle East': 25, 'Oceania': 25, 'Brazil': 25,None:25}
 
 
 best_score = 999
@@ -65,32 +69,43 @@ for sigma in parameters['sigma']:
     for beta in parameters['beta']:
         for tau in parameters['tau']:
 
-            env = trueskill.setup(sigma=sigma, beta=beta, tau=tau)
-            all_game_all_player = create_game_player_trueskill(all_game_all_player.copy(), env)
-            logloss = get_logloss(all_game_all_player)
+            for eu_start_rating in [26,26.5,27]:
 
-            if logloss < best_score:
-                best_score = logloss
-                best_sigma = sigma
-                best_entity = "player"
-                best_tau = tau
-                best_beta = beta
+                for na_start_rating in [25.5,26]:
 
-            print("player", sigma, beta, tau, logloss)
+                    for start_rating_quantile in [13,18,25]:
 
-            trueskill.setup(sigma=sigma, beta=beta, tau=tau)
-            all_game_all_team = create_game_team_trueskill(all_game_all_team.copy(),env)
+                        start_rating_regions['Europe'] = eu_start_rating
+                        start_rating_regions['North America'] = na_start_rating
 
-            logloss = get_logloss(all_game_all_team)
+                        env = trueskill.setup(sigma=sigma, beta=beta, tau=tau)
+                        new_game_team = create_game_player_trueskill(all_game_all_player.copy(), env,start_rating_quantile,start_ratings=start_rating_regions)
+                        logloss_ts,logloss_logistic = get_logloss(new_game_team)
 
-            if logloss < best_score:
-                best_score = logloss
-                best_sigma = sigma
-                best_entity = "team"
-                best_tau = tau
-                best_beta = beta
+                        logloss = min(logloss_ts,logloss_logistic )
+                        if logloss < best_score:
+                            best_score = logloss
+                            best_sigma = sigma
+                            best_entity = "player"
+                            best_tau = tau
+                            best_beta = beta
 
-            print("team",sigma,beta,tau,logloss)
+                        print("player", logloss_ts,logloss_logistic,sigma, beta, tau)
+
+                        def run_team():
+                            trueskill.setup(sigma=sigma, beta=beta, tau=tau)
+                            new_all_game_all_team = create_game_team_trueskill(all_game_all_team.copy(),env,start_rating_quantile,start_ratings=start_rating_regions)
+
+                            team_logloss_ts,team_logloss_logistic = get_logloss(new_all_game_all_team)
+                            logloss = min(team_logloss_ts, team_logloss_logistic)
+                            if logloss < best_score:
+                                best_score = logloss
+                                best_sigma = sigma
+                                best_entity = "team"
+                                best_tau = tau
+                                best_beta = beta
+
+                            print("team",team_logloss_ts,team_logloss_logistic,sigma,beta,tau,logloss)
 
 
 
