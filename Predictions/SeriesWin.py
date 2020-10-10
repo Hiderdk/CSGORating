@@ -3,11 +3,11 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 round_win_models = {
-    1: pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_game_number1"),
-    2: pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_game_number2"),
-    3: pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_game_number2")
+    1: pd.read_pickle(r"/Files/models/round_difference_game_number1"),
+    2: pd.read_pickle(r"/Files/models/round_difference_game_number2"),
+    3: pd.read_pickle(r"/Files/models/round_difference_game_number3")
 }
-round_win_model = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference")
+round_win_model = pd.read_pickle(r"/Files/models/round_difference")
 
 class SeriesWinProbability():
 
@@ -69,8 +69,6 @@ class SeriesWinProbability():
             self.get_bo1_probability()
 
 
-
-
     def generate_bo3(self):
 
         self.probs = {}
@@ -78,7 +76,7 @@ class SeriesWinProbability():
         feature_dict = {
             'win_probability':[self.win_probability],
             'series_net_opponent_adjusted_performance_rating':[0],
-            'series_round_difference': [0],
+           # 'series_round_difference': [0],
         }
 
 
@@ -93,18 +91,18 @@ class SeriesWinProbability():
             0:{0:{0:0,1:0,'prob':0},1:{0:0,1:0,'prob':0}},
             1:{0:{0:0,1:0,'prob':0},1:{0:0,1:0,'prob':0}},
         }
-        for number1,class_1 in enumerate(round_win_model.classes_):
+        for number1,class_1 in enumerate(round_win_models[1].classes_):
             print(class_1)
             if class_1 not in self.map_score_probabilities[0]:
                 self.map_score_probabilities[0][class_1] = 0
             self.map_score_probabilities[0][class_1] += self.probs[0][number1]
             net_performance = self.generate_net_performance(class_1)
             feature_dict['series_net_opponent_adjusted_performance_rating'] =net_performance
-            feature_dict['series_round_difference'] = class_1
+            #feature_dict['series_round_difference'] = class_1
             self.probs[1] = self.get_probs(feature_dict,2)
 
 
-            for number2, class_2 in enumerate(round_win_model.classes_):
+            for number2, class_2 in enumerate(round_win_models[2].classes_):
                 #feature_dict['series_round_difference'] = class_2
                 if class_2 not in self.map_score_probabilities[1]:
                     self.map_score_probabilities[1][class_2] = 0
@@ -112,7 +110,7 @@ class SeriesWinProbability():
 
                 net_performance = self.generate_net_performance(class_2)
                 feature_dict['series_net_opponent_adjusted_performance_rating'] =+ net_performance
-                feature_dict['series_round_difference'] =+ class_2
+                #feature_dict['series_round_difference'] =+ class_2
 
                 self.probs[2] = self.get_probs(feature_dict,3)
                 game1_result = 0
@@ -127,8 +125,7 @@ class SeriesWinProbability():
                                                                                       self.probs[0][number1]
 
 
-
-                for number3, class_3 in enumerate(round_win_model.classes_):
+                for number3, class_3 in enumerate(round_win_models[3].classes_):
                     if class_3 not in self.map_score_probabilities[2]:
                         self.map_score_probabilities[2][class_3] = 0
 
@@ -144,7 +141,6 @@ class SeriesWinProbability():
                         self.map_win_probabilities[game1_result][game2_result][game3_result] += self.probs[2][number3]*self.probs[1][number2]*self.probs[0][number1]
 
     def calculcate_bo3_probability(self):
-
 
         self.series_result_probability = {}
         self.series_result_probability['0-2'] = self.map_win_probabilities[0][0]['prob']
@@ -164,6 +160,14 @@ class SeriesWinProbability():
         probs = round_win_models[game_number].predict_proba(feature_df)[0]
         return probs
 
+    def sum_probs_to_map_win_probability(sel,game_number,probs:np.ndarray):
+        prob = 0
+        for number,class_ in enumerate(round_win_models[game_number].classes_):
+            if class_ > 0:
+                prob+=probs[number]
+
+        return prob
+
 
     def get_bo1_probability(self):
         pass
@@ -171,12 +175,15 @@ class SeriesWinProbability():
 if __name__ == '__main__':
     import time
     format = "bo3"
-    feature_dict = {
-        'prob':0.6,
-        'series_round_difference':[0]
-    }
-    st = time.time()
-    series_win_probability = SeriesWinProbability(win_probability=0.61,rating_difference=410,format=format)
 
+    st = time.time()
+    series_win_probability = SeriesWinProbability(win_probability=0.6,rating_difference=430,format=format)
+    feature_dict = {
+        'rating_difference':[410],
+        'default_rating_difference':[430],
+        #'series_net_opponent_adjusted_performance_rating':[0],
+    }
+    probs = series_win_probability.get_probs(feature_dict,2)
+    print(series_win_probability.sum_probs_to_map_win_probability(2,probs))
     series_win_probability.generate_series_probability()
     print(time.time()-st)
