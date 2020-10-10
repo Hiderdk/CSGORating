@@ -1,14 +1,14 @@
 import numpy as np
 import random
+from tqdm import tqdm
 
-
-
+OT_VALUES = [15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78]
 
 import pandas as pd
 
 class RoundProbabilityGenerator():
 
-    def __init__(self,simulations=12000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037 ):
+    def __init__(self,simulations=18000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037 ):
         self.threshold_count = threshold_count
         self.simulations = simulations
         self.start_map_to_round_div = start_map_to_round_div
@@ -23,8 +23,8 @@ class RoundProbabilityGenerator():
 
         self.max_probability_to_round_probabilities = {}
 
-
-        for threshold_number in range(self.threshold_count):
+        pbar = tqdm([i for i in range(self.threshold_count)])
+        for threshold_number in pbar:
 
             min_win_probability = start_value+threshold_number*step_value
             max_win_probability = start_value+(1+threshold_number)*step_value
@@ -103,8 +103,23 @@ class RoundProbabilityGenerator():
                     round_results.append(-1)
                     rounds_won[1]+=1
 
-                if max(rounds_won) == 16:
+
+                if max(rounds_won) == 16 and min(rounds_won) < 15:
                     game_over = True
+
+                if rounds_won[0] == 18 and rounds_won[1] == 18:
+                    h = 3
+                if max(rounds_won) >=16 and min(rounds_won) >=15:
+                    for tot_number,tot_round in enumerate(OT_VALUES):
+                        if min(rounds_won) >= tot_round and min(rounds_won) < OT_VALUES[tot_number+1]:
+                            ot_equal_tot = tot_round
+                            break
+
+                    if (max(rounds_won)-ot_equal_tot) %4 == 0 and max(rounds_won)-min(rounds_won) >=2:
+                        game_over = True
+
+
+                if game_over:
                     round_difference = rounds_won[0]-rounds_won[1]
                     if round_difference not in round_outcomes:
                         round_outcomes[round_difference] = 0
@@ -119,6 +134,8 @@ class RoundProbabilityGenerator():
 
         map_win_probability = games_won[0]/self.simulations
         return map_win_probability,round_outcomes
+
+
 
 
     def get_simulated_average_round_difference(self, round_outcomes):
@@ -137,12 +154,15 @@ class RoundProbabilityGenerator():
 
 
 
-    def predict_proba(self):
-        pass
+    def predict_proba(self,map_win_probability):
+        for max_probability in self.max_probability_to_round_probabilities:
+            if map_win_probability < max_probability:
+                return self.max_probability_to_round_probabilities[max_probability]
+
 
 
 if __name__ == '__main__':
-
+    import pickle
     rp = RoundProbabilityGenerator()
     df = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\_newall_game_all_team_rating")
     df['rating_difference'] = df['time_weight_rating'] - df['opponent_time_weight_rating']
@@ -155,3 +175,4 @@ if __name__ == '__main__':
     model.fit(X, df['won'])
     df['prob'] = model.predict_proba(X)[:, 1]
     rp.fit(df)
+    pickle.dump(rp,open(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_probability","wb"))
