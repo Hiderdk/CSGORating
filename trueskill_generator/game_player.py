@@ -1,12 +1,28 @@
-from trueskill import win_probability
+from trueskill import get_trueskill_win_probability
 import numpy as np
+from tqdm import tqdm
+import math
 
-def create_game_player_trueskill(df, env, start_rating_quantile,start_ratings={}):
-    player_ratings = {}
-    region_players = {}
-    region_players_rating = {}
+def get_trueskill_start_rating(region_players,region,region_players_rating,start_rating_quantile,start_rating_regions):
+    if region not in region_players:
+        region_players[region] = []
+        region_players_rating[region] = []
+
+    count_region_players = len(region_players_rating[region])
+    if count_region_players > 60:
+        start_rating = np.percentile(region_players_rating[region], start_rating_quantile)  #
+    else:
+
+        start_rating = start_rating_regions[region]
+
+    return start_rating
+
+def create_game_player_trueskill(df, env, start_rating_quantile, start_rating_regions={}, player_ratings={}, region_players={}, region_players_rating={}):
+
+
     game_ids = df['game_id'].unique().tolist()
-    for game_id in game_ids:
+    pbar = tqdm(game_ids)
+    for game_id in pbar:
 
         single_rows = df[df['game_id'] == game_id].sort_values(by='won', ascending=False)
         if len(single_rows) != 10:
@@ -37,18 +53,16 @@ def create_game_player_trueskill(df, env, start_rating_quantile,start_ratings={}
                 indexes.append(index)
                 player_id = row['player_id']
                 region = row['region']
+                try:
+                    if math.isnan(region):
+                        region = 'unknown'
+                except TypeError:
+                    pass
                 single_game_player_regions[team_number].append(region)
                 single_game_player_ids[team_id].append(player_id)
                 if player_id not in player_ratings:
-                    if region not in region_players:
-                        region_players[region] = []
-                        region_players_rating[region] = []
 
-                    count_region_players = len(region_players_rating[region])
-                    if count_region_players > 60:
-                        start_rating = np.percentile(region_players_rating[region], start_rating_quantile)  #
-                    else:
-                        start_rating = start_ratings[region]
+                    start_rating = get_trueskill_start_rating(region_players,region,region_players_rating,start_rating_quantile,start_rating_regions)
 
                     player_ratings[player_id] = env.Rating(start_rating)
 
@@ -68,11 +82,11 @@ def create_game_player_trueskill(df, env, start_rating_quantile,start_ratings={}
 
         all_sigmas = team_player_sigmas[0]+team_player_sigmas[1]
         all_mus = team_player_mus[0]+team_player_mus[1]
-        all_opponent_sigmas = team_player_sigmas[1]+team_player_sigmas[1]
-        all_opponent_mus = team_player_mus[1]+team_player_mus[1]
+        all_opponent_sigmas = team_player_sigmas[1]+team_player_sigmas[0]
+        all_opponent_mus = team_player_mus[1]+team_player_mus[0]
         t0 =    single_game_player_ratings[0]
         t1 = single_game_player_ratings[1]
-        win_prob = win_probability(t0, t1,env.beta)
+        win_prob = get_trueskill_win_probability(t0, t1, env.beta)
         all_probs = [win_prob,win_prob,win_prob,win_prob,win_prob,1-win_prob,1-win_prob,1-win_prob,1-win_prob,1-win_prob]
         df.at[indexes, 'prob'] = all_probs
         df.at[indexes, 'sigma'] = all_sigmas
@@ -90,9 +104,9 @@ def create_game_player_trueskill(df, env, start_rating_quantile,start_ratings={}
                 player_ratings[player_id] = new_ratings[team_number][player_number]
 
                 ix = region_players[region].index(player_id)
-                region_players_rating[ix] = player_ratings[player_id].mu
+                region_players_rating[region][ix] = player_ratings[player_id].mu
 
 
-    all_game_all_team = df.groupby(['game_id','team_id','start_date_time','team_name','game_number','won'])[['prob','sigma','mu','opponent_mu','opponent_sigma']].mean().reset_index()
+    all_game_all_team = df.groupby(['game_id','team_id','start_date_time','game_number','won'])[['prob','sigma','mu','opponent_mu','opponent_sigma']].mean().reset_index()
 
-    return all_game_all_team
+    return all_game_all_team, player_ratings, region_players, region_players_rating

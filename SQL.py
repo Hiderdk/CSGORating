@@ -1,5 +1,6 @@
 import settings
 import pandas as pd
+
 import mysql.connector
 conn = mysql.connector.connect(
     host=settings.MYSQL_HOST,
@@ -73,6 +74,27 @@ def  get_all_game_all_player_from_series_ids(series_ids):
     sql = sql % in_p
     return pd.read_sql(sql, conn, params=series_ids)
 
+
+def  get_all_game_all_player_from_game_ids(game_ids):
+    in_p = create_in_numbers(game_ids)
+    sql = """
+     select gp.player_id,gp.team_id,gt.won,gt.rounds_won,gt.rounds_lost,cr.region,
+     gt.team_id_opponent,g.start_date_time,g.series_id,g.game_number,gt.game_id
+    from game_player gp 
+    join game g on g.id=gp.game_id
+    join player p on p.id = gp.player_id
+    join country_region cr on cr.country = p.country
+    join game_team gt on gt.game_id = gp.game_id and gp.team_id = gt.team_id
+    where g.id in (%s)
+    order by g.start_date_time asc
+
+    """
+    sql = sql % in_p
+    return pd.read_sql(sql, conn, params=game_ids)
+
+
+
+
 def get_team():
     sql = """
     select t.id as team_id,t.name as team_name from team t
@@ -113,6 +135,17 @@ def get_game_team(min_date):
     join team te on te.id = gt.team_id
     join game g on g.id = gt.game_id
     where g.start_date_time > %s
+
+    """
+    return pd.read_sql(sql, conn, params=[min_date])
+
+def get_series_team(min_date):
+    sql = """
+    select te.name as team_name,start_date_time,st.games_won,st.games_lost,st.series_id,st.team_id,format
+    from series_team st
+    join team te on te.id = st.team_id
+    join series s on s.id = st.series_id
+    where s.start_date_time > %s
 
     """
     return pd.read_sql(sql, conn, params=[min_date])

@@ -24,10 +24,10 @@ class SingleGameRatingGenerator():
                  update_dataframe=False,
                  single_game_all_player=None,
                  start_rating_quantile=0.22,
-                 team_rating_prediction_beta=1500,
-                 expected_player_percentage_contribution_beta=18500,
-                 performance_multiplier=18500,
-                 squared_performance_factor=1,
+                 team_rating_prediction_beta=4300,
+                 expected_player_percentage_contribution_beta=9000,
+                 performance_multiplier=42000,
+                 squared_performance_factor=1.25,
                  start_rating_regions = {'Europe': 1800, 'Africa': -900, 'Asia': 0,
                                'North America': 940, 'South America': 0,
                                'Middle East': 100, 'Oceania': -200, 'Brazil': 500,
@@ -48,6 +48,7 @@ class SingleGameRatingGenerator():
         self.single_game_single_team_all_player = {}
         self.player_ratings = {}
         self.team_ratings = {}
+        self.team_default_ratings = {}
         self.team_regions = {}
         self.player_ratings_dict = {}
         self.single_game_stored_player_values = {}
@@ -82,6 +83,7 @@ class SingleGameRatingGenerator():
 
             self.player_ratings[team_id] = []
             self.team_ratings[team_id] = 0
+            self.team_default_ratings[team_id] = 0
 
 
             for player_id in self.team_player_ids[team_id]:
@@ -125,6 +127,9 @@ class SingleGameRatingGenerator():
                 for equal_to_value in equal_to_values:
 
                     filtered_rows = self.get_filtered_rows(column_name_equal_to,equal_to_value,updated_game_single_player) ### CURRENTLY DOES NOT HANDLE MULTPLE DIFFERNT FILTERS
+                    if column_name_equal_to == "map" and len (filtered_rows) > 0:
+                        h = 3
+
                     backup_value = self.get_backup_value(player_id,time_weight_name,self.player_time_weight_methods)
 
                     EstimatedValueObject = EstimatedValueGenerator(rating_method,filtered_rows, backup_value, self.start_date_time,column_name)
@@ -143,6 +148,9 @@ class SingleGameRatingGenerator():
                         self.player_ratings[team_id].append(time_estimated_value)
                         self.team_ratings[team_id] += time_estimated_value / len(self.team_player_ids[team_id])
 
+                    elif time_weight_name == "time_weight_default_rating":
+                        self.team_default_ratings[team_id] +=time_estimated_value / len(self.team_player_ids[team_id])
+
                     if self.update_dataframe is True:
                         player_index = self.single_game_all_player[self.single_game_all_player['player_id']==player_id].index.tolist()[0]
                         self.player_id_to_player_index[player_id] = player_index
@@ -157,7 +165,7 @@ class SingleGameRatingGenerator():
             updated_filtered_rows = filtered_rows
         else:
             updated_filtered_rows = filtered_rows[
-                filtered_rows[column_name_equal_to].str.lower() == equal_to_value]
+                filtered_rows[column_name_equal_to].str.lower() == equal_to_value.lower()]
 
         return updated_filtered_rows
 
@@ -257,6 +265,10 @@ class SingleGameRatingGenerator():
             self.single_game_stored_player_values[player_id]['time_weight_rating_certain_ratio']
         self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weight_rating'] = \
         self.single_game_stored_player_values[player_id]['time_weight_rating']
+
+        self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weight_default_rating'] = \
+        self.single_game_stored_player_values[player_id]['time_weight_default_rating']
+
         if 'time_weighted_opponent_adjusted_kpr' in self.single_game_stored_player_values[player_id]:
             self.all_player.loc[self.all_player['player_id'] == player_id, 'time_weighted_opponent_adjusted_kpr'] = \
                 self.single_game_stored_player_values[player_id]['time_weighted_opponent_adjusted_kpr']

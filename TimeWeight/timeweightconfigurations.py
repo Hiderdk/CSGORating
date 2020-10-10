@@ -4,12 +4,12 @@ player_time_weight_methods = {
 
         'column_name': 'opponent_adjusted_performance_rating',
         'column_names_equal_to': {'player_id':['player_id']},
-        'parameter': 0.4,
+        'parameter': 0.5,
         'max_days_ago': 500,
         'backup_column_name': 'start_time_weight_rating',
         'backup_source': "all_player",
         "games_played_weight": 1,
-        'games_played_div_factor': 5,
+        'games_played_div_factor': 6,
     },
 
     'time_weight_rating': {
@@ -21,6 +21,17 @@ player_time_weight_methods = {
         'backup_column_name': 'time_weight_default_rating',
         "games_played_weight": 0.05,
         'games_played_div_factor': 20,
+    },
+
+    'map_time_weight_rating': {
+
+        'column_name': 'opponent_adjusted_performance_rating',
+        'column_names_equal_to': {'player_id': ['player_id'],'map':'map'},
+        'parameter': 9,
+        'max_days_ago': 120,
+        'backup_column_name': 'time_weight_rating',
+        "games_played_weight": 0.05,
+        'games_played_div_factor': 25,
     },
 
 

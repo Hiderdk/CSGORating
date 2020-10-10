@@ -1,9 +1,6 @@
 import pandas as pd
 import datetime
 
-import numpy as np
-
-
 def convert_dict_to_df(data_dict):
     new_dict = {}
 

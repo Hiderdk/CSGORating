@@ -18,8 +18,8 @@ class RatingGenerator():
                  insert_final_file=True,
                  final_file_name="_new",
                  parameter_configuration=player_time_weight_methods,
-                 start_rating_quantile=0.1,
-                 squared_performance_factor=1.4,
+                 start_rating_quantile=0.22,
+                 squared_performance_factor=1.25,
                  verbose=True,
                  update_frequency=400,
                  team_rating_prediction_beta=5300,
@@ -50,6 +50,7 @@ class RatingGenerator():
             'team_name': [],
             'most_recent_date': [],
             'time_weight_rating': [],
+          #  'time_weight_default_rating': [],
             'time_weight_rating_certain_ratio': [],
             'player1_name': [],
             'player1_rating': [],
@@ -95,6 +96,7 @@ class RatingGenerator():
             self.load_data_from_sql()
             self.all_game_all_player = self.add_columns_to_all_game_all_player(self.all_game_all_player)
             self.all_player['time_weight_rating'] = ""
+            self.all_player['time_weight_default_rating'] = ""
             self.all_player['time_weight_rating_certain_ratio'] = 0
             self.all_player['start_time_weight_rating'] = None
             self.generate_player_round_wins()
@@ -213,13 +215,20 @@ class RatingGenerator():
     def create_game_team(self,all_game_all_player):
         group_sum = all_game_all_player.groupby(['team_id','game_id'])['kills'].sum().reset_index()
         self.all_game_all_team = all_game_all_player.groupby(
-            ['opponent_region','rounds_won','rounds_lost','team_id','team_name','team_id_opponent','game_id','start_date_time','game_number','series_id'])[['opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].mean().reset_index()
+            ['opponent_region','rounds_won','rounds_lost','team_id','team_name','team_id_opponent','game_id','start_date_time','game_number','series_id'])[
+            ['map_time_weight_rating','time_weight_default_rating','opponent_adjusted_performance_rating','won','time_weight_rating','time_weight_rating_certain_ratio']].\
+            mean().reset_index()
+
         self.all_game_all_team = sort_2_values_by_ascending(self.all_game_all_team,['start_date_time','game_number'])
         #self.all_game_all_team =  merge_dataframes_on_different_column_names_on_right(self.all_team,self.all_game_all_team,"team_id","team_id")
         self.all_game_all_team  = pd.merge(group_sum,self.all_game_all_team,on=['team_id','game_id'])
         self.all_game_all_team['lost'] = -self.all_game_all_team['won']+1
-        sub_df = self.all_game_all_team[['time_weight_rating_certain_ratio','time_weight_rating','game_id','team_id_opponent']].\
-            rename(columns={"time_weight_rating":"opponent_time_weight_rating","time_weight_rating_certain_ratio":"opponent_time_weight_rating_certain_ratio"})
+        sub_df = self.all_game_all_team[['time_weight_rating_certain_ratio','time_weight_rating','game_id','team_id_opponent','map_time_weight_rating','time_weight_default_rating']].\
+            rename(columns={
+            'time_weight_default_rating': 'opponent_time_weight_default_rating',
+                            'map_time_weight_rating':'opponent_map_time_weight_rating',
+                            "time_weight_rating":"opponent_time_weight_rating",
+                            "time_weight_rating_certain_ratio":"opponent_time_weight_rating_certain_ratio"})
 
         self.all_game_all_team = pd.merge(sub_df,self.all_game_all_team,left_on=['game_id','team_id_opponent'],right_on=['game_id','team_id'])
         self.all_series_all_team = self.all_game_all_team.groupby(['team_id','series_id'])[['opponent_adjusted_performance_rating']].mean().reset_index()
@@ -271,7 +280,7 @@ class RatingGenerator():
     def print_out_ratings(self):
         vg = self.all_player[self.all_player['time_weight_rating'] != ''].sort_values(by='time_weight_rating',
                                                                                       ascending=False)
-        print(vg[['time_weight_rating', 'time_weight_rating_certain_ratio', 'player_name']].dropna().head(20))
+        print(vg[['time_weight_rating', 'time_weight_rating_certain_ratio','time_weight_default_rating', 'player_name']].dropna().head(20))
         self.all_team = pd.DataFrame.from_dict(self.all_team_dict)
         vt = self.all_team.sort_values(by='time_weight_rating', ascending=False)
         print(vt[['time_weight_rating', 'team_name']].dropna().head(40))
@@ -301,6 +310,7 @@ class RatingGenerator():
 
         player_number = 0
         team_time_weight_ratings = []
+        team_time_weight_default_rating = []
         team_time_weight_certain_ratios = []
         for player_id in player_ids:
             player_number += 1
@@ -315,15 +325,19 @@ class RatingGenerator():
             self.all_team_dict['player' + str(player_number) + '_rating'][index] = time_weight_rating
             team_time_weight_certain_ratios.append(time_weight_rating_certain_ratio)
             team_time_weight_ratings.append(time_weight_rating)
+            team_time_weight_default_rating.append(player_row['time_weight_default_rating'].iloc[0])
 
         try:
             self.all_team_dict['time_weight_rating'][index] = sum(team_time_weight_ratings) / len(
                 team_time_weight_ratings)
+            #self.all_team_dict['time_weight_default_rating'][index] = sum(team_time_weight_default_rating) / len(
+           #     team_time_weight_default_rating)
             self.all_team_dict['time_weight_rating_certain_ratio'][index] = sum(
                 team_time_weight_certain_ratios) / len(
                 team_time_weight_certain_ratios)
         except:
             self.all_team_dict['time_weight_rating'][index] = None
+            #self.all_team_dict['time_weight_default_rating'][index] = None
             self.all_team_dict['time_weight_rating_certain_ratio'][index] = None
 
         self.all_team_dict['most_recent_date'][index] = start_date_time

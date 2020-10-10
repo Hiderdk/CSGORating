@@ -1,4 +1,4 @@
-from trueskill import win_probability
+from trueskill import get_trueskill_win_probability
 def create_game_team_trueskill(df,trueskill,start_rating_quantile,start_ratings={}):
     team_ratings = {}
 
@@ -27,7 +27,7 @@ def create_game_team_trueskill(df,trueskill,start_rating_quantile,start_ratings=
             teams.append(team_ratings[team_id])
 
         new_teams[0], new_teams[1] = trueskill.rate_1vs1(teams[0], teams[1])
-        win_prob = win_probability(teams[0], teams[1],trueskill.beta)
+        win_prob = get_trueskill_win_probability(teams[0], teams[1], trueskill.beta)
         df.at[indexes, 'prob'] = [win_prob, 1 - win_prob]
         df.at[indexes, 'sigma'] = team_sigmas
         df.at[indexes, 'mu'] = team_mus

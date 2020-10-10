@@ -5,9 +5,9 @@ import pandas as pd
 from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
 filepath_dataframes =r"C:\Users\Mathias\PycharmProjects\Ratings\Files"
-df_file_name = "all_game_all_player_rating"
+df_file_name = "_newall_game_all_player_rating"
 all_game_all_player =  pd.read_pickle(filepath_dataframes + "//" + df_file_name).sort_values(by=['start_date_time','game_number'])
-all_game_all_player = all_game_all_player[all_game_all_player['start_date_time'].between('2015-07-01','2016-07-01')]
+all_game_all_player = all_game_all_player[all_game_all_player['start_date_time'].between('2016-03-01','2016-11-01')]
 
 
 group_sum = all_game_all_player.groupby(['team_id', 'game_id'])['kills'].sum().reset_index()
@@ -38,9 +38,9 @@ start_rating = 25
 trueskill.setup(draw_probability=0)
 
 parameters = {
-    'sigma':[4],
-    'beta':[6],
-    'tau':[0.02,0.03]
+    'sigma':[3,4,5],
+    'beta':[5,6,6.5],
+    'tau':[0.02,0.025,0.03]
 }
 
 
@@ -59,9 +59,9 @@ def get_logloss(df):
 
     return logloss_ts,logloss_logistic
 
-start_rating_regions = {'Europe': 25, 'Africa': 25, 'Asia': 25,
-                        'North America': 25, 'South America': 25,
-                        'Middle East': 25, 'Oceania': 25, 'Brazil': 25,None:25}
+start_rating_regions = {'Europe': 25, 'Africa': 23, 'Asia': 23,
+                        'North America': 25, 'South America': 24,
+                        'Middle East': 23, 'Oceania': 23, 'Brazil': 24,None:23}
 
 
 best_score = 999
@@ -69,17 +69,19 @@ for sigma in parameters['sigma']:
     for beta in parameters['beta']:
         for tau in parameters['tau']:
 
-            for eu_start_rating in [26,26.5,27]:
+            for eu_start_rating in [27,27.5,28,28.5,29.5]:
 
-                for na_start_rating in [25.5,26]:
+                for na_start_rating in [25.5,26,26.5,27.5,28]:
 
-                    for start_rating_quantile in [13,18,25]:
+
+                    for start_rating_quantile in [18]:
 
                         start_rating_regions['Europe'] = eu_start_rating
                         start_rating_regions['North America'] = na_start_rating
 
                         env = trueskill.setup(sigma=sigma, beta=beta, tau=tau)
-                        new_game_team = create_game_player_trueskill(all_game_all_player.copy(), env,start_rating_quantile,start_ratings=start_rating_regions)
+                        new_game_team = create_game_player_trueskill(all_game_all_player.copy(), env, start_rating_quantile,
+                                                                     start_rating_regions=start_rating_regions)
                         logloss_ts,logloss_logistic = get_logloss(new_game_team)
 
                         logloss = min(logloss_ts,logloss_logistic )
@@ -89,8 +91,11 @@ for sigma in parameters['sigma']:
                             best_entity = "player"
                             best_tau = tau
                             best_beta = beta
+                            best_eu_start_rating = eu_start_rating
+                            best_na_start_rating = na_start_rating
+                            best_start_rating_quantile = start_rating_quantile
 
-                        print("player", logloss_ts,logloss_logistic,sigma, beta, tau)
+                        print("player", logloss_ts,logloss_logistic,eu_start_rating,na_start_rating,start_rating_quantile,sigma, beta, tau)
 
                         def run_team():
                             trueskill.setup(sigma=sigma, beta=beta, tau=tau)
@@ -111,5 +116,5 @@ for sigma in parameters['sigma']:
 
 
 
-print(best_score,best_entity,best_sigma,best_beta,best_tau)
+print(best_score,best_eu_start_rating,best_na_start_rating,best_start_rating_quantile,best_entity,best_sigma,best_beta,best_tau)
 

@@ -1,8 +1,10 @@
 from settings import *
 from SQL import *
 import datetime
-
-
+from trueskill_generator.run_trueskill import  *
+from trueskill_generator.game_player import get_trueskill_start_rating
+from trueskill import get_trueskill_win_probability
+import traceback
 from Functions.Lists import *
 from Ratings.SingleGame import SingleGameRatingGenerator
 
@@ -16,6 +18,7 @@ MAXDAYCOUNTSHEET_LOW_TIER = 2
 MAXDAYCOUNTSHEET_HIGHTIER = 10
 ot_default_probability = 0.093
 
+ACTIVE_MAPS = ['mirage','dust2','train','nuke','inferno','overpass','vertigo']
 covered_tournaments = ['ESL Pro League Season 11 North America']
 
 class SeriesPredictionGenerator():
@@ -29,6 +32,9 @@ class SeriesPredictionGenerator():
         self.ml_models_dict = {
             "won": pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\csgo_new_won_model"),
             "won_regular": pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\csgo_new_regular_won_model"),
+            'won_stacked': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\game_winner_model"),
+            'won_map_stacked': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\game_winner_model_map"),
+            'won_pick_map_stacked': pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\game_winner_model_map_picked"),
 
         }
         self.workbook_name = "CSGO"
@@ -39,22 +45,20 @@ class SeriesPredictionGenerator():
             'Team2':[],
             'Win Probability1':[],
             'Win Probability2':[],
-            'Rating1':[],
-            'Rating2':[],
-            'Match Uncertain Ratio':[],
-            'Recent Performance Rating1':[],
-            'Recent Performance Rating2': [],
-            'Recent Days Ago1': [],
-            'Recent Days Ago2': [],
+            'Match Uncertain Ratio': [],
             'Sheet Name':[],
         }
-        pass
+
 
     def load_data(self):
+        self.ts_player_ratings = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\player_ratings")
+        self.ts_region_players = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\region_players")
+        self.ts_region_players_rating = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\region_players_rating")
+
         self.all_game_all_team = pd.read_pickle(
             local_file_path + "//_newall_game_all_team_rating").sort_values(by=['start_date_time','game_number'],
                                                                                       ascending=[False,False])
-        self. all_game_all_player = pd.read_pickle(local_file_path+"//_newall_game_all_player_rating").sort_values(by=['start_date_time','game_number'],ascending=False)
+        self.all_game_all_player = pd.read_pickle(local_file_path+"//_newall_game_all_player_rating").sort_values(by=['start_date_time','game_number'],ascending=False)
         self.all_game_all_player = self.all_game_all_player[self.all_game_all_player['opponent_region'].notna()]
 
 
@@ -62,7 +66,7 @@ class SeriesPredictionGenerator():
         self.all_team = pd.read_pickle(local_file_path + "//_newall_team")
         self.uncertainty_model = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\uncertainty_model")
 
-        import time
+
         st = time.time()
         for index,row in self.all_team.iterrows():
             team_id = row['team_id']
@@ -76,20 +80,8 @@ class SeriesPredictionGenerator():
         self.future_series_player = pre_series_player[~pre_series_player.series_id.isin(        historical_series_ids)]
 
 
-    def get_last_x_number_of_games_abs_error(self,team_player_ids,number_of_games_back=14):
-        abs_errors = []
-        team_number = -1
-        for team,player_ids in team_player_ids.items():
-            team_number+=1
 
 
-            for player_id in player_ids:
-                rows = self.all_game_all_player[self.all_game_all_player['player_id']==player_id].head(number_of_games_back)
-                mean_abs_error = abs(rows['time_weight_rating']-rows['opponent_adjusted_performance_rating']).mean()
-                abs_errors.append(mean_abs_error)
-
-        average_error = sum(abs_errors)/len(abs_errors)
-        return average_error
 
     def calculcate_team_certain_ratio(self,team_player_ids,player_stored_values):
         team_certain_ratios = []
@@ -115,6 +107,26 @@ class SeriesPredictionGenerator():
         return team_squared_certain_ratios[0]*0.5+team_squared_certain_ratios[1]*0.5
 
 
+    def get_trueskill_team_players(self,team_player_ids):
+        trueskill_team_players = {}
+        team_number = -1
+        for team in team_player_ids:
+            team_number+=1
+            trueskill_team_players[team_number] = []
+            for player_id in team_player_ids[team]:
+                if player_id not in self.ts_player_ratings:
+                    region = self.all_player[self.all_player['player_id']==player_id]['region'].iloc[0]
+                    start_rating = get_trueskill_start_rating(self.ts_region_players, region, self.ts_region_players_rating, start_rating_quantile,
+                                               start_rating_regions)
+                    self.ts_player_ratings[player_id] = Rating(start_rating,sigma=sigma)
+
+
+                trueskill_team_players[team_number].append( self.ts_player_ratings[player_id])
+
+
+        return trueskill_team_players
+
+
     def main(self):
 
         self.all_game_all_player['games_played'] = self. all_game_all_player.groupby(['player_id']).cumcount()
@@ -126,16 +138,22 @@ class SeriesPredictionGenerator():
         series_ids = self.future_series_player['series_id'].unique().tolist()
 
         existing_sheet_names = get_sheet_names(self.workbook_name)
-        schedule_df = read_google_sheet("Schedule",self.workbook_name)
-        self.schedule_dict = {}
-        for column in schedule_df.columns:
-            self.schedule_dict[column] = []
-        for index,row in schedule_df.iterrows():
-            for column in self.schedule_dict:
-                self.schedule_dict[column] = [row[column]]
+        #schedule_df = read_google_sheet("Schedule",self.workbook_name)
+       # self.schedule_dict = {}
+        #for column in schedule_df.columns:
+       #  #   self.schedule_dict[column] = []
+       # for index,row in schedule_df.iterrows():
+        #    for column in self.schedule_dict:
+           #     self.schedule_dict[column] = [row[column]]
 
 
         sheet_names = []
+
+        player_configurations =   player_time_weight_methods.copy()
+
+
+
+        player_configurations['map_time_weight_rating']['column_names_equal_to']['map'] = ACTIVE_MAPS
 
         for series_id in series_ids:
             try:
@@ -148,6 +166,8 @@ class SeriesPredictionGenerator():
                 team_ids = get_unique_values_from_column_in_list_format(single_series_all_player,"team_id")
                 team_names = get_unique_values_from_column_in_list_format(single_series_all_player, "team_name")
                 team_player_ids = get_team_player_dictionary(single_series_all_player, "team_id", "player_id")
+                if len(team_player_ids[team_ids[0]]) != 5 or len(team_player_ids[team_ids[1]]) != 5:
+                    continue
                 player_id_to_player_name = self.get_player_ids_to_player_names(single_series_all_player)
                 team_player_names = self.create_team_player_names(team_player_ids, player_id_to_player_name)
                 sheet_name = str(team_names[0]) + '_' + str(team_names[1])
@@ -157,74 +177,55 @@ class SeriesPredictionGenerator():
                     sheet_name = reverse_sheet_name
 
                 sheet_names.append(sheet_name)
-                if team_player_ids == "24324":
-                    if sheet_name in existing_sheet_names and self.make_sheet_for_newest_series_only:
-                        single_row = schedule_df[
-                            (schedule_df['Team1']==team_names[0])&
-                            (schedule_df['Team2']==team_names[1])
-                        ]
-                        if len(single_row) > 0:
-
-                            for column in self.schedule_dict:
-                                self.schedule_dict[column].append(single_row[column].iloc[0])
-
-                            continue
 
 
+                SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time,
+                                                       self.all_game_all_player, self.all_player,
+                                                       player_configurations, update_dataframe=False,
+                                                       single_game_all_player=single_series_all_player)
 
-                single_series_schedule_row = schedule_df[(schedule_df['Team1'] == team_names[0])
-                                                         & (schedule_df['Team2'] == team_names[1])
-                                                         ]
-
-                if   self.calculcate_win_probabilities is True or len(single_series_schedule_row)==0:
-
-                    SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time, self.all_game_all_player,self.all_player,
-                                                           player_time_weight_methods,update_dataframe=False, single_game_all_player=single_series_all_player)
-
-                    try:
-                        SingleGame.calculcate_ratings()
-                    except IndexError:
-                        print("Couldnt do series", team_names)
-                        continue
-
-                    team_ratings = [
-                        round(SingleGame.team_ratings[team_ids[0]],0),
-                        round(SingleGame.team_ratings[team_ids[1]],0),
-                    ]
-                    win_probabilities = self.get_win_probability_regular_time(team_ratings)
-                    team_certain_ratios = self.calculcate_team_certain_ratio(team_player_ids,SingleGame.single_game_stored_player_values)
-                    certain_ratio_avg_sq = self.generate_averaged_squared_team_certain_ratio(team_certain_ratios,squared_factor=0.4)
-                   # mean_abs_errors = self.get_last_x_number_of_games_abs_error(team_player_ids)
-
-                    pred = self.uncertainty_model.predict([[certain_ratio_avg_sq]])[0]
-                    mean_pred = 1785
-                    difference = pred-mean_pred
-                    uncertain_ratio = round(1/(1+10**(-difference/18)),4)
-                    print(uncertain_ratio)
-
-
-                elif self.calculcate_win_probabilities is False:
-                    time_weight_configurations = {
-                        'time_weighted_default_opponent_adjusted_kpr': player_time_weight_methods[
-                            'time_weighted_default_opponent_adjusted_kpr'],
-                        'time_weighted_opponent_adjusted_kpr':player_time_weight_methods['time_weighted_opponent_adjusted_kpr'],
-
-                    }
-                    SingleGame = SingleGameRatingGenerator(team_ids, team_player_ids, start_date_time,
-                                                           self.all_game_all_player, self.all_player,
-                                                           time_weight_configurations, update_dataframe=False,
-                                                           single_game_all_player=single_series_all_player)
-
+                try:
                     SingleGame.calculcate_ratings()
+                except IndexError:
+                    print("Couldnt do series", team_names)
+                    continue
 
-                    team_ratings = [
-                        float(single_series_schedule_row['Rating1'].iloc[0]),
-                        float(single_series_schedule_row['Rating2'].iloc[0]),
-                    ]
+                team_ratings = [
+                    round(SingleGame.team_ratings[team_ids[0]], 0),
+                    round(SingleGame.team_ratings[team_ids[1]], 0),
+                ]
 
-                    win_probabilities = self.get_win_probability_regular_time(team_ratings)
+                team_default_ratings = [
+                    round(SingleGame.team_default_ratings[team_ids[0]], 0),
+                    round(SingleGame.team_default_ratings[team_ids[1]], 0),
+                ]
 
-                print(sheet_name, win_probabilities)
+                trueskill_team_players = self.get_trueskill_team_players(team_player_ids)
+                trueskill_win_probability = get_trueskill_win_probability(trueskill_team_players[0],
+                                                                          trueskill_team_players[1], beta=5)
+
+                win_probabilities, map_probs_dict = self.get_win_probability_regular_time(team_ratings,
+                                                                                          trueskill_win_probability,
+                                                                                          team_default_ratings,
+                                                                                          team_player_ids,
+                                                                                          SingleGame.single_game_stored_player_values,
+                                                                                          team_names)
+
+                team_certain_ratios = self.calculcate_team_certain_ratio(team_player_ids,
+                                                                         SingleGame.single_game_stored_player_values)
+                certain_ratio_avg_sq = self.generate_averaged_squared_team_certain_ratio(team_certain_ratios,
+                                                                                         squared_factor=0.4)
+                # mean_abs_errors = self.get_last_x_number_of_games_abs_error(team_player_ids)
+
+                pred = self.uncertainty_model.predict([[certain_ratio_avg_sq]])[0]
+                mean_pred = 1785
+                difference = pred - mean_pred
+                uncertain_ratio = round(1 / (1 + 10 ** (-difference / 18)), 4)
+
+                map_probs_df = pd.DataFrame.from_dict(map_probs_dict)
+
+
+                print(team_names, win_probabilities)
 
 
 
@@ -239,15 +240,18 @@ class SeriesPredictionGenerator():
                 self.schedule_dict['Team2'].append(team_names[1])
                 self.schedule_dict['Win Probability1'].append(str(round(win_probabilities['0_all']*100,0)) + "%")
                 self.schedule_dict['Win Probability2'].append(str(round(win_probabilities['1_all']*100,0)) + "%")
-                self.schedule_dict['Rating1'].append(team_ratings[0])
-                self.schedule_dict['Rating2'].append(team_ratings[1])
+                #self.schedule_dict['Time Win Probability1'].append(str(round(win_probabilities['0_time'] * 100, 0)) + "%")
+                #self.schedule_dict['Time Win Probability2'].append(str(round(win_probabilities['1_time'] * 100, 0)) + "%")
+
                 self.schedule_dict['Match Uncertain Ratio'].append(str(round(uncertain_ratio*100,0)) + "%")
-                self.schedule_dict['Recent Performance Rating1'].append(historical_team_stats_dict[team_names[0]][index_perf])
-                self.schedule_dict['Recent Performance Rating2'].append( historical_team_stats_dict[team_names[1]][index_perf])
-                self.schedule_dict['Recent Days Ago1'].append(
-                    historical_team_stats_dict[team_names[0]][index_perf_ago])
-                self.schedule_dict['Recent Days Ago2'].append(
-                    historical_team_stats_dict[team_names[1]][index_perf_ago])
+               # self.schedule_dict['TS Win Probability1'].append(str(round(trueskill_win_probability * 100, 0)) + "%")
+               # self.schedule_dict['TS Win Probability2'].append(str(round((1-trueskill_win_probability) * 100, 0)) + "%")
+                #self.schedule_dict['Recent Performance Rating1'].append(historical_team_stats_dict[team_names[0]][index_perf])
+                #self.schedule_dict['Recent Performance Rating2'].append( historical_team_stats_dict[team_names[1]][index_perf])
+                #self.schedule_dict['Recent Days Ago1'].append(
+                #    historical_team_stats_dict[team_names[0]][index_perf_ago])
+                #self.schedule_dict['Recent Days Ago2'].append(
+                #    historical_team_stats_dict[team_names[1]][index_perf_ago])
                 self.schedule_dict['Tournament'].append(single_series_all_player['tournament_name'].iloc[0])
                 self.schedule_dict['Sheet Name'].append(sheet_name)
 
@@ -256,9 +260,12 @@ class SeriesPredictionGenerator():
                 if sheet_name in existing_sheet_names and self.make_sheet_for_newest_series_only:
                     continue
 
-                if days_in_the_future < MAXDAYCOUNTSHEET_HIGHTIER and avg_rating > 4000 or days_in_the_future <MAXDAYCOUNTSHEET_LOW_TIER  :
+                if days_in_the_future < MAXDAYCOUNTSHEET_HIGHTIER and avg_rating > 3000 or days_in_the_future <MAXDAYCOUNTSHEET_LOW_TIER  :
 
                     create_new_sheet_if_not_exist(sheet_name, self.workbook_name)
+                    clear_sheet(sheet_name, self.workbook_name)
+                    append_df_to_sheet(map_probs_df, sheet_name, workbook_name=self.workbook_name, row_number=21,
+                                       column_number=1)
 
                     if self.is_over_under_kill_series(start_date_time,team_ratings,single_series_all_player) is True:
 
@@ -279,24 +286,24 @@ class SeriesPredictionGenerator():
                        #                                                   name='4M Stats')
 
 
-                      #  estimated_team_kills = self.get_estimated_team_kills(scenario_df,team_ids)
+                        estimated_team_kills = self.get_estimated_team_kills(scenario_df,team_ids)
 
-                       # map_kpr_df = self.create_map_kpr_df(player_id_to_player_name,team_player_ids, SingleGame.single_game_stored_player_values,
-                        #                                    estimated_team_kills)
+                        map_kpr_df = self.create_map_kpr_df(player_id_to_player_name,team_player_ids, SingleGame.single_game_stored_player_values,
+                                                            estimated_team_kills)
 
 
                         try:
 
                             #append_df_to_sheet(historical_over_df, sheet_name, self.workbook_name, row_number=19, column_number=1)
                             append_df_to_sheet(over_under_variations_df,sheet_name,self.workbook_name,row_number=4,column_number=1)
-                            #append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
+                            append_df_to_sheet(map_kpr_df, sheet_name, self.workbook_name, row_number=32, column_number=1)
                             pass
                         except Exception as e:
-                            print(e)
+                            traceback.print_exc()
 
                     for team_number, team_id in enumerate(team_ids):
                         append_df_to_sheet(round(self.team_results[team_id],0), sheet_name=sheet_name,
-                                           workbook_name=self.workbook_name, row_number=21 + team_number * 19)
+                                           workbook_name=self.workbook_name, row_number=45 + team_number * 19)
                     append_df_to_sheet(historical_team_stats_df, sheet_name, self.workbook_name, row_number=1, column_number=13)
                     player_ratings_dict = {
                         'Players':['Rating']
@@ -308,7 +315,7 @@ class SeriesPredictionGenerator():
                         player_ratings_dict[player_name] = [round(SingleGame.single_game_stored_player_values[player_id]['time_weight_rating'],0)]
                     append_df_to_sheet(pd.DataFrame.from_dict(player_ratings_dict),sheet_name,workbook_name=self.workbook_name,row_number=1,column_number=1)
             except Exception as e:
-                print(e)
+                traceback.print_exc()
 
 
         delete_old_sheets(self.workbook_name,sheet_names)
@@ -533,35 +540,83 @@ class SeriesPredictionGenerator():
 
         return player_id_to_player_name
 
-    def get_win_probability_regular_time(self,team_ratings):
+    def get_win_probability_regular_time(self,team_ratings,trueskill_win_probability,team_default_ratings,team_player_ids,single_game_stored_player_values,team_names):
         win_probabilities = {}
-       # team_ratings[0] = 0
-       # team_ratings[1] = 0
+
         rating_difference = team_ratings[0]- team_ratings[1]
+        default_rating_difference = team_default_ratings[0] - team_default_ratings[1]
 
-        #regular_model = self.ml_models_dict['won_regular']
-        #scaled_data_regular = self.ml_models_dict['won_regular_scaled']
-        #scaled_df = scale_features_and_insert_to_dataframe(scaled_data_regular, {'rating_difference':rating_difference})
-        #win_probability_regular = regular_model.predict_proba(scaled_df)[0][1]
-
-        #win_regular = 1-win_probabilities['ot']
-       # other_win_probability =  round(win_regular/(win_regular+10**(-rating_difference/4000)),3)
-        #win_probabilities[0] = win_probability_regular
-        #win_probabilities[1] = win_regular-      win_probabilities[0]
         all_model = self.ml_models_dict['won']
-        regular_model = self.ml_models_dict['won_regular']
-        feature_dict = {'rating_difference':rating_difference}
-        X =self.convert_feature_dict_to_df(feature_dict)
-        probs = regular_model.predict_proba(X)
-        win_probabilities['ot'] = probs[0][1]
-        win_probabilities['0_all'] = round(all_model.predict_proba(X)[0][1],3)
-        win_probabilities['1_all'] = round(all_model.predict_proba(X)[0][0],3)
+       # regular_model = self.ml_models_dict['won_regular']
+       # feature_dict = {'rating_difference':rating_difference}
+       # X =self.convert_feature_dict_to_df(feature_dict)
+        #probs = regular_model.predict_proba(X)
+        #win_probabilities['ot'] = probs[0][1]
+       # win_probabilities['0_time'] = round(all_model.predict_proba(X)[0][1],3)
+       # win_probabilities['1_time'] = round(all_model.predict_proba(X)[0][0],3)
 
-        if rating_difference < 0 and win_probabilities['0_all']  > 0.5:
-            h = 3
+        X = self.convert_feature_dict_to_df({
+            'rating_difference':rating_difference,
+            'default_rating_difference':default_rating_difference,
+           # 'trueskill_win_probability':trueskill_win_probability
+        })
+        # probs = regular_model.predict_proba(X)
+        # win_probabilities['ot'] = probs[0][1]
+        win_probabilities['0_all'] = round(self.ml_models_dict['won_stacked'].predict_proba(X)[0][1], 3)
+        win_probabilities['1_all'] = round(self.ml_models_dict['won_stacked'].predict_proba(X)[0][0], 3)
+
+        map_probs_dict = {
+            'Win Probability':ACTIVE_MAPS,
+            team_names[0]:[],
+            team_names[1]:[],
+            team_names[0]+ ' Picked':[],
+            team_names[1] + ' Picked': [],
+            team_names[0] + ' Leftover': [],
+            team_names[1] + ' Leftover': [],
+        }
+
+        for map in ACTIVE_MAPS:
+            team_ratings = {}
+            number = -1
+            for team,player_ids in team_player_ids.items():
+                number+=1
+                player_ratings = []
+                for player_id in player_ids:
+                    column_name = 'map_time_weight_rating_'+map.lower()
+                    rating = single_game_stored_player_values[player_id][column_name]
+                    player_ratings.append(rating)
+
+                team_ratings[number] = sum(player_ratings)/len(player_ratings)
+
+            map_rating_difference = team_ratings[0]-team_ratings[1]
+            map_prob = self.ml_models_dict['won_map_stacked'].predict_proba([[rating_difference,default_rating_difference,map_rating_difference]])[0][1]
+
+            map_prob_picked = self.ml_models_dict['won_pick_map_stacked'].predict_proba(
+                [[rating_difference, default_rating_difference,trueskill_win_probability, map_rating_difference,2]])[0][1]
+
+            map_prob_opp_picked = self.ml_models_dict['won_pick_map_stacked'].predict_proba(
+                [[rating_difference, default_rating_difference,trueskill_win_probability, map_rating_difference,0]])[0][1]
+
+            map_prob_leftover = self.ml_models_dict['won_pick_map_stacked'].predict_proba(
+                [[rating_difference, default_rating_difference,trueskill_win_probability, map_rating_difference,1]])[0][1]
+
+            map_prob_str0 = str(int(round(map_prob*100,0) )) + "%"
+            map_prob_str1 = str(int(round((1-map_prob) * 100, 0))) + "%"
+            map_probs_dict[team_names[0]].append(map_prob_str0)
+            map_probs_dict[team_names[1]].append(map_prob_str1)
+
+            map_prob_picked_str0 = str(int(round(map_prob_picked * 100, 0))) + "%"
+            map_prob_picked_str1 = str(int(round((1- map_prob_opp_picked) * 100, 0))) + "%"
+            map_prob_picked_str0left = str(int(round(( map_prob_leftover) * 100, 0))) + "%"
+            map_prob_picked_str1left = str(int(round((1-map_prob_leftover) * 100, 0))) + "%"
 
 
-        return win_probabilities
+            map_probs_dict[team_names[0] + ' Picked'].append(map_prob_picked_str0)
+            map_probs_dict[team_names[1] + ' Picked'].append(map_prob_picked_str1)
+            map_probs_dict[team_names[0] +' Leftover'].append(map_prob_picked_str0left)
+            map_probs_dict[team_names[1] + ' Leftover'].append(map_prob_picked_str1left)
+
+        return win_probabilities,map_probs_dict
 
 
     def convert_feature_dict_to_df(self,feature_dict):
