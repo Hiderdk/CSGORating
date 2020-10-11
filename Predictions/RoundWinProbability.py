@@ -8,7 +8,7 @@ import pandas as pd
 
 class RoundProbabilityGenerator():
 
-    def __init__(self,simulations=18000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037 ):
+    def __init__(self,simulations=28000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037 ):
         self.threshold_count = threshold_count
         self.simulations = simulations
         self.start_map_to_round_div = start_map_to_round_div
@@ -155,14 +155,34 @@ class RoundProbabilityGenerator():
 
 
     def predict_proba(self,map_win_probability):
+
+
         for max_probability in self.max_probability_to_round_probabilities:
             if map_win_probability < max_probability:
-                return self.max_probability_to_round_probabilities[max_probability]
+                rp_prob = 0
+                for round_difference,prob in self.max_probability_to_round_probabilities[max_probability].items():
+                    if round_difference > 0:
+                        rp_prob+=prob
+
+                ratio_diff = rp_prob/map_win_probability
+
+                for round_difference, prob in self.max_probability_to_round_probabilities[max_probability].items():
+                    if round_difference > 0:
+                        pre = self.max_probability_to_round_probabilities[max_probability][round_difference]
+                        self.max_probability_to_round_probabilities[max_probability][round_difference]/=ratio_diff
+
+                        #print(round_difference,self.max_probability_to_round_probabilities[max_probability][round_difference])
+
+                probability = self.max_probability_to_round_probabilities[max_probability]
+                return  probability
 
 
 
 if __name__ == '__main__':
     import pickle
+
+    loaded_model = pickle.load(open(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_probability", 'rb'))
+    prob = loaded_model.predict_proba(0.52)
     rp = RoundProbabilityGenerator()
     df = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\_newall_game_all_team_rating")
     df['rating_difference'] = df['time_weight_rating'] - df['opponent_time_weight_rating']
@@ -174,5 +194,7 @@ if __name__ == '__main__':
     X = df[['rating_difference', 'default_rating_difference']]
     model.fit(X, df['won'])
     df['prob'] = model.predict_proba(X)[:, 1]
+    df['round_difference'] = df['rounds_won'] - df['rounds_lost']
+
     rp.fit(df)
     pickle.dump(rp,open(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_probability","wb"))

@@ -14,7 +14,7 @@ df['default_rating_difference'] = df['time_weight_default_rating']-df['opponent_
 
 from sklearn.linear_model import LogisticRegression
 from SQL import get_series_team
-min_date = "2019-10-01"
+min_date = "2019-03-18"
 series_team = get_series_team(min_date)
 
 game1df = df[df['game_number']==1]
@@ -26,7 +26,7 @@ model = LogisticRegression()
 X = series_team[['rating_difference','default_rating_difference']]
 model.fit(X,series_team['won'])
 series_team['prob'] = model.predict_proba(X)[:,1]
-rows = series_team[series_team['prob'].between(0.57,0.63)]
+rows = series_team[series_team['prob'].between(0.59,0.7)]
 print(len(rows))
 print(rows.prob.mean())
 print(rows.rating_difference.mean(),rows['default_rating_difference'].mean())
