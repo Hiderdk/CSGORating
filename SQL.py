@@ -19,7 +19,7 @@ def create_in_numbers(ids):
 
 def get_all_from_series_player(min_date):
     sql = """
-    select te.name as team_name,sp.series_id,player_id,sp.team_id,team_id_opponent,
+    select te.name as team_name,sp.series_id,player_id,sp.team_id,team_id_opponent,s.format,
      s.start_date_time,t.is_offline,t.prize_pool,t.name as tournament_name
      from series_player sp
     join series s on s.id = sp.series_id

@@ -26,7 +26,7 @@ model = LogisticRegression()
 X = series_team[['rating_difference','default_rating_difference']]
 model.fit(X,series_team['won'])
 series_team['prob'] = model.predict_proba(X)[:,1]
-rows = series_team[series_team['prob'].between(0.59,0.7)]
+rows = series_team[series_team['prob'].between(0.54,0.66)]
 print(len(rows))
 print(rows.prob.mean())
 print(rows.rating_difference.mean(),rows['default_rating_difference'].mean())

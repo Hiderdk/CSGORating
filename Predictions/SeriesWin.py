@@ -68,8 +68,11 @@ class SeriesWinProbability():
         if self.format == "bo3":
             self.generate_bo3()
             self.calculcate_bo3_probability()
+
         elif self.format == "bo1":
-            self.get_bo1_probability()
+            self.generate_bo3()
+
+        return self.series_win_probability
 
 
     def generate_bo3(self):
@@ -93,12 +96,12 @@ class SeriesWinProbability():
             0:{0:{0:0,1:0,'prob':0},1:{0:0,1:0,'prob':0}},
             1:{0:{0:0,1:0,'prob':0},1:{0:0,1:0,'prob':0}},
         }
-        round_win_probsmap1 = round_win_probability.predict_proba(self.win_probability)
+        self.round_win_probsmap1 = round_win_probability.predict_proba(self.win_probability)
         self.to2_prob = 0
         self.to1_prob = 0
 
 
-        for round_difference1,prob1 in round_win_probsmap1.copy().items():
+        for round_difference1,prob1 in self.round_win_probsmap1.copy().items():
             if round_difference1 > 0:
                 self.to1_prob += prob1
 
@@ -165,7 +168,7 @@ class SeriesWinProbability():
             0]
 
         so =  self.series_result_probability['0-2'] + self.series_result_probability['2-0']+    self.series_result_probability['2-1']+   self.series_result_probability['1-2']
-        print(self.series_result_probability)
+        self.series_win_probability = self.series_result_probability['2-1']+ self.series_result_probability['2-0']
 
 
     def get_probs(self,feature_dict:Dict,game_number: int)->np.ndarray:
@@ -185,14 +188,15 @@ class SeriesWinProbability():
 
 
     def get_bo1_probability(self):
-        pass
+        self.round_win_probsmap1 = round_win_probability.predict_proba(self.win_probability)
+        self.series_win_probability = self.win_probability
 
 if __name__ == '__main__':
     import time
     format = "bo3"
 
     st = time.time()
-    series_win_probability = SeriesWinProbability(win_probability=0.64,rating_difference=700,format=format)
+    series_win_probability = SeriesWinProbability(win_probability=0.6,rating_difference=460,format=format)
 
     series_win_probability.generate_series_probability()
    # probs = series_win_probability.get_probs(feature_dict,2)

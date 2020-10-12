@@ -16,6 +16,7 @@ from Functions.Miscellaneous import scale_features_and_insert_to_dataframe
 from Functions.GoogleSheets import read_google_sheet
 MAXDAYCOUNTSHEET_LOW_TIER = 2
 MAXDAYCOUNTSHEET_HIGHTIER = 10
+from Predictions.SeriesWin import SeriesWinProbability
 ot_default_probability = 0.093
 
 ACTIVE_MAPS = ['mirage','dust2','train','nuke','inferno','overpass','vertigo']
@@ -45,6 +46,8 @@ class SeriesPredictionGenerator():
             'Team2':[],
             'Win Probability1':[],
             'Win Probability2':[],
+            'Series Win Probability1':[],
+            'Series Win Probability2': [],
             'Match Uncertain Ratio': [],
             'Sheet Name':[],
         }
@@ -158,6 +161,7 @@ class SeriesPredictionGenerator():
         for series_id in series_ids:
             try:
                 single_series_all_player = get_rows_where_column_equal_to(self.future_series_player,series_id,"series_id")
+                format = single_series_all_player['format'].iloc[0]
                 start_date_time =    single_series_all_player .head(1)['start_date_time'].iloc[0]
                 current_day = datetime.datetime.today()
                 days_in_the_future = (start_date_time - current_day).days
@@ -211,6 +215,11 @@ class SeriesPredictionGenerator():
                                                                                           SingleGame.single_game_stored_player_values,
                                                                                           team_names)
 
+                rating_difference = (team_default_ratings[0]-team_default_ratings[1])*0.5+(team_ratings[0]-team_ratings[1])*0.5
+                series_win_probability = SeriesWinProbability( win_probabilities['0_all'],
+                format, rating_difference,)
+                series_win_probability.generate_series_probability()
+
                 team_certain_ratios = self.calculcate_team_certain_ratio(team_player_ids,
                                                                          SingleGame.single_game_stored_player_values)
                 certain_ratio_avg_sq = self.generate_averaged_squared_team_certain_ratio(team_certain_ratios,
@@ -229,7 +238,7 @@ class SeriesPredictionGenerator():
 
 
 
-                historical_team_stats_dict= self.get_historical_team_stats_dict(   team_ids,   team_names,   win_probabilities, team_player_ids)
+                historical_team_stats_dict= self.get_historical_team_stats_dict(  series_win_probability, team_ids,   team_names,   win_probabilities, team_player_ids)
                 historical_team_stats_df = pd.DataFrame.from_dict(historical_team_stats_dict)
 
 
@@ -240,6 +249,9 @@ class SeriesPredictionGenerator():
                 self.schedule_dict['Team2'].append(team_names[1])
                 self.schedule_dict['Win Probability1'].append(str(round(win_probabilities['0_all']*100,0)) + "%")
                 self.schedule_dict['Win Probability2'].append(str(round(win_probabilities['1_all']*100,0)) + "%")
+                self.schedule_dict['Series Win Probability1'].append(str(round(series_win_probability.series_win_probability * 100, 0)) + "%")
+                self.schedule_dict['Series Win Probability2'].append(str(round(series_win_probability.series_win_probability* 100, 0)) + "%")
+
                 #self.schedule_dict['Time Win Probability1'].append(str(round(win_probabilities['0_time'] * 100, 0)) + "%")
                 #self.schedule_dict['Time Win Probability2'].append(str(round(win_probabilities['1_time'] * 100, 0)) + "%")
 
@@ -266,6 +278,11 @@ class SeriesPredictionGenerator():
                     clear_sheet(sheet_name, self.workbook_name)
                     append_df_to_sheet(map_probs_df, sheet_name, workbook_name=self.workbook_name, row_number=21,
                                        column_number=1)
+                    handicap_prob_df = self.generate_handicap_probabilities(series_win_probability,team_names)
+
+
+
+                    append_df_to_sheet(handicap_prob_df,sheet_name,workbook_name=self.workbook_name,row_number=13,column_number=13)
 
                     if self.is_over_under_kill_series(start_date_time,team_ratings,single_series_all_player) is True:
 
@@ -334,6 +351,23 @@ class SeriesPredictionGenerator():
         return estimated_team_kills
 
 
+
+    def generate_handicap_probabilities(self,series_win_probability,team_names):
+        handicap_probabilities_dict = {
+            'Handicap':[],
+            'Probability' + team_names[0]:[]
+        }
+        sorted_list = sorted(series_win_probability.round_win_probsmap1,reverse=False)
+        sum_prob = 0
+        for round_difference in sorted_list:
+            prob = series_win_probability.round_win_probsmap1[round_difference]
+            sum_prob +=prob
+            handicap = str(round_difference-0.5)
+            handicap_probabilities_dict['Handicap'].append(handicap)
+            handicap_probabilities_dict['Probability'+team_names[0]].append(str(round(sum_prob*100,0)) + "%")
+
+        return pd.DataFrame.from_dict(handicap_probabilities_dict)
+
     def create_map_kpr_df(self,player_id_to_player_name,team_players,single_game_stored_player_values,estimated_team_kills):
 
         map_kpr_dict = {
@@ -371,7 +405,7 @@ class SeriesPredictionGenerator():
 
 
 
-    def get_historical_team_stats_dict(self,team_ids,team_names,win_probabilities,team_players):
+    def get_historical_team_stats_dict(self,series_win_probability,team_ids,team_names,win_probabilities,team_players):
         min_date_4_months = datetime.datetime.now() - datetime.timedelta(4 * 365 / 12)
         filtered_game_all_team_4_months = self.all_game_all_team[self.all_game_all_team['start_date_time'] > min_date_4_months]
         filtered_game_all_player_4_months = self.all_game_all_player[self.all_game_all_player['start_date_time'] > min_date_4_months]
@@ -426,12 +460,25 @@ class SeriesPredictionGenerator():
 
             last_15_games_performance_rating.append(round(average_performance_rating_12_games,0))
 
+
         win_rate_dict = {
-            'Team Stats': ["Win Probability", "4 Month Win Rate","Average 4 Months Kills", "4 Month Performance Rating", "12 Games Performance Rating","Recent Performance Rating","Recent Days Ago"],
-            team_names[0]: [win_probabilities['0_all'], win_rates_4_month[0],average_kills_4_month[0],performance_rating_4_month[0],last_15_games_performance_rating[0],average_performance_rating_recents[0],recent_game_counts[0]],
-            team_names[1]: [win_probabilities['1_all'], win_rates_4_month[1],average_kills_4_month[1],performance_rating_4_month[1],last_15_games_performance_rating[1],average_performance_rating_recents[1],recent_game_counts[1]],
+            'Team Stats': ["Win Probability", "4 Month Win Rate", "4 Month Performance Rating", "12 Games Performance Rating","Recent Performance Rating","Recent Days Ago"],
+            team_names[0]: [win_probabilities['0_all'], win_rates_4_month[0],
+                            performance_rating_4_month[0],last_15_games_performance_rating[0],
+                            average_performance_rating_recents[0],recent_game_counts[0]],
+            team_names[1]: [win_probabilities['1_all'], win_rates_4_month[1],
+                            performance_rating_4_month[1],last_15_games_performance_rating[1],average_performance_rating_recents[1],recent_game_counts[1]],
 
         }
+        if '2-0' in series_win_probability.series_result_probability:
+            win_rate_dict['Team Stats'].append("2-0")
+            win_rate_dict['Team Stats'].append("2-1")
+            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-0'] * 100, 0)) + "%")
+            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-1'] * 100, 0)) + "%")
+            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['0-2'] * 100, 0)) + "%")
+            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['1-2'] * 100, 0)) + "%")
+
+
         return  win_rate_dict
 
 
