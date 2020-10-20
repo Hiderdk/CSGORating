@@ -3,21 +3,27 @@ import random
 from tqdm import tqdm
 
 OT_VALUES = [15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78]
-
 import pandas as pd
+
+pd.options.mode.chained_assignment = None  # default='warn'
 
 class RoundProbabilityGenerator():
 
-    def __init__(self,simulations=28000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037 ):
+    def __init__(self,simulations=28000,threshold_count=100,start_map_to_round_div=5,start_momentum_factor=0.037):
         self.threshold_count = threshold_count
         self.simulations = simulations
         self.start_map_to_round_div = start_map_to_round_div
         self.start_momentum_factor = start_momentum_factor
 
     def fit(self,df,probability_name="prob"):
+        self.df = df
+        self.df['round_difference'] = self.df['rounds_won'] - self.df['rounds_lost']
+
+        self.df = self.df[abs(self.df ['round_difference']) != 2]
         self.probability_name = probability_name
         self.fit_map_to_round_div()
-        self.fit_momentum(df)
+        #self.fit_momentum(self.df)
+        self.fit_to_minimize_absolute_error()
         start_value = 0
         step_value = (1-start_value)/self.threshold_count
 
@@ -32,13 +38,65 @@ class RoundProbabilityGenerator():
 
             value = np.log((average_map_probability) / (1 - (average_map_probability)))
             round_win_probability = 1 / (1 + 10 ** (-value / self.map_to_round_div))
-            _,round_outcomes = self.simulate(round_win_probability)
+            _,round_outcomes = self.simulate(round_win_probability, momentum_factor=self.best_momentum_factor,momentum_rounds_back=self.best_momentum_rounds_back)
             _,round_probs = self.get_simulated_average_round_difference(round_outcomes)
             self.max_probability_to_round_probabilities[max_win_probability] = round_probs
 
-    def fit_momentum(self,df,probability_name="prob",max_error=0.07):
-        df['round_difference'] = df['rounds_won'] - df['rounds_lost']
-        map_probability = 0.6
+    def fit_to_minimize_absolute_error(self):
+
+        max_error = 99999
+
+
+
+        min_momentum_ = self.start_momentum_factor * 0.03
+        max_momentum = self.start_momentum_factor*1.5
+        variations = 5
+        step = (max_momentum-min_momentum_)/variations
+        self.map_to_round_div = self.start_map_to_round_div
+        momentum_rounds_backs = [3]
+        skill_percentages = [0.7,0.8]
+        map_to_round_divs = [3]
+
+        for map_to_round_div in map_to_round_divs:
+            for skill_percentage in skill_percentages:
+
+                for momentum_number in range(variations):
+                    momentum_value =    min_momentum_+step*momentum_number
+
+                    for momentum_rounds_back in momentum_rounds_backs:
+                        pbar = tqdm([i for i in range(self.threshold_count)])
+                        start_value = 0
+                        step_value = (1 - start_value) / self.threshold_count
+
+                        for threshold_number in pbar:
+                            min_value = start_value+step_value*threshold_number
+                            max_value = start_value+(step_value)*(threshold_number+1)
+                            rows = self.df[self.df[self.probability_name].between(min_value,max_value)]
+                            map_probability = rows[self.probability_name].mean()
+                            indexes = rows.index.tolist()
+                            self.max_probability_to_round_probabilities = {}
+
+                            value = np.log((map_probability) / (1 - (map_probability)))
+                            round_win_probability = 1 / (1 + 10 ** (-value / map_to_round_div))
+                            _, round_outcomes = self.simulate(round_win_probability, momentum_factor=momentum_value,
+                                                              momentum_rounds_back=momentum_rounds_back,skill_percentage=skill_percentage)
+                            _, round_probs = self.get_simulated_average_round_difference(round_outcomes)
+                            self.df = self.insert_single_simulation_to_df(self.df, indexes, round_probs)
+
+                        error = abs(self.df['round_difference'] - self.df['mean_rd_prediction']).mean()
+                        print(error, momentum_value, momentum_rounds_back,skill_percentage,map_to_round_div)
+                        if error < max_error:
+                            self.best_score = error
+                            self.best_momentum_rounds_back = momentum_rounds_back
+                            self.best_momentum_factor = momentum_value
+                            self.best_skill_percentage = skill_percentage
+                            self.map_to_round_div = map_to_round_div
+
+        print("Best Momentum Rounds back",self.best_momentum_rounds_back,"Best Momentum Factor",self.best_momentum_factor,  self.best_skill_percentage,  self.map_to_round_div )
+
+    def fit_momentum(self,probability_name="prob",max_error=0.07,map_probability=0.6):
+
+
         min_map_probability = map_probability-0.03
         max_map_probability = map_probability+0.03
         value = np.log((map_probability) / (1 - (map_probability)))
@@ -46,17 +104,17 @@ class RoundProbabilityGenerator():
         _, round_outcomes = self.simulate(round_win_probability)
         error = 999
         learned_rate = 0.01
-        rows = df[df[probability_name].between(min_map_probability, max_map_probability)]
+        rows = self.df[self.df[probability_name].between(min_map_probability, max_map_probability)]
         average_historical_round_difference = rows['round_difference'].mean()
 
-        self.momentum_factor = self.start_momentum_factor
+        self.best_momentum_factor = self.start_momentum_factor
 
         while abs(error) > max_error:
             round_win_probability = 1 / (1 + 10 ** (-value / self.map_to_round_div))
-            _, round_outcomes = self.simulate(round_win_probability,momentum_factor=self.momentum_factor)
+            _, round_outcomes = self.simulate(round_win_probability, momentum_factor=self.best_momentum_factor)
             simulated_average_round_difference,_ = self.get_simulated_average_round_difference(round_outcomes)
             error = simulated_average_round_difference - average_historical_round_difference
-            self.momentum_factor-= error * learned_rate
+            self.best_momentum_factor-= error * learned_rate
 
 
 
@@ -74,8 +132,33 @@ class RoundProbabilityGenerator():
             error = simulated_map_probability-map_probability
             self.map_to_round_div +=error*learned_rate
 
+    def insert_historical_over265_probs_and_mean_pred(self, df):
+        self.df = df
+        self.df['over_26.5'] = 0
+        self.df.loc[self.df['rounds_won']+self.df['rounds_lost']>26.5,'over_26.5'] = 1
+        for index,row in self.df.iterrows():
+            map_win_probability = row[self.probability_name]
+            probs = self.predict_proba(map_win_probability)
+            self.df = self.insert_single_simulation_to_df(self.df,index,probs)
 
-    def simulate(self,round_win_probability,momentum_factor=0.037,skill_percentage=0.54):
+
+
+    def insert_single_simulation_to_df(self,df,index,probs):
+
+        over265 = 0
+        average_round_difference_prediction = 0
+        for round_difference, prob in probs.items():
+            average_round_difference_prediction += round_difference * prob
+            if abs(round_difference) < 5.5:
+                over265 += prob
+
+        df.at[index, 'over_26.5_prob'] = over265
+        df.at[index, 'mean_rd_prediction'] = average_round_difference_prediction
+
+        return df
+
+
+    def simulate(self,round_win_probability,momentum_factor=0.037,skill_percentage=0.54,momentum_rounds_back=4):
 
         round_outcomes = {
         }
@@ -88,10 +171,13 @@ class RoundProbabilityGenerator():
 
             while game_over == False:
 
-                last_4_rounds = round_results[len(round_results)-4:]
+                last_4_rounds = round_results[len(round_results)-momentum_rounds_back:]
 
-                net = sum(last_4_rounds)-len(last_4_rounds)*(round_win_probability-0.5)*skill_percentage
-
+               # net = sum(last_4_rounds)-len(last_4_rounds)*(round_win_probability-0.5)*skill_percentage
+                if len(last_4_rounds)>0:
+                    net = sum(last_4_rounds)/len(last_4_rounds)-0.5
+                else:
+                    net = 0.5
                 mom = net*momentum_factor
                 prob = max(min((round_win_probability-0.5)*skill_percentage+0.5+mom,0.99),0.01)
 
@@ -107,8 +193,7 @@ class RoundProbabilityGenerator():
                 if max(rounds_won) == 16 and min(rounds_won) < 15:
                     game_over = True
 
-                if rounds_won[0] == 18 and rounds_won[1] == 18:
-                    h = 3
+
                 if max(rounds_won) >=16 and min(rounds_won) >=15:
                     for tot_number,tot_round in enumerate(OT_VALUES):
                         if min(rounds_won) >= tot_round and min(rounds_won) < OT_VALUES[tot_number+1]:
@@ -136,8 +221,6 @@ class RoundProbabilityGenerator():
         return map_win_probability,round_outcomes
 
 
-
-
     def get_simulated_average_round_difference(self, round_outcomes):
 
         round_probs = {}
@@ -156,23 +239,66 @@ class RoundProbabilityGenerator():
 
     def predict_proba(self,map_win_probability):
 
+        round_differences = []
+        for i in range(-16, 17):
+            round_differences.append(i)
 
         for max_probability in self.max_probability_to_round_probabilities:
             if map_win_probability < max_probability:
                 rp_prob = 0
-                for round_difference,prob in self.max_probability_to_round_probabilities[max_probability].items():
+                for round_difference in round_differences:
+                    if abs(round_difference) < 2:
+                        continue
+                    if round_difference not in self.max_probability_to_round_probabilities[max_probability]:
+                        prob = 0
+                    else:
+                        prob = self.max_probability_to_round_probabilities[max_probability][round_difference]
+
                     if round_difference > 0:
                         rp_prob+=prob
 
                 ratio_diff = rp_prob/map_win_probability
 
-                for round_difference, prob in self.max_probability_to_round_probabilities[max_probability].items():
+                for round_difference in round_differences:
+                    if abs(round_difference) < 2:
+                        continue
+                    if round_difference not in   self.max_probability_to_round_probabilities[max_probability]:
+                        self.max_probability_to_round_probabilities[max_probability][round_difference] = 0
                     if round_difference > 0:
-                        pre = self.max_probability_to_round_probabilities[max_probability][round_difference]
+
                         self.max_probability_to_round_probabilities[max_probability][round_difference]/=ratio_diff
+                    elif round_difference <0:
+                        self.max_probability_to_round_probabilities[max_probability][round_difference] *= ratio_diff
 
                         #print(round_difference,self.max_probability_to_round_probabilities[max_probability][round_difference])
 
                 probability = self.max_probability_to_round_probabilities[max_probability]
+
                 return  probability
 
+if __name__ == '__main__':
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import log_loss
+    model = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\models\round_difference_probability")
+    df = pd.read_pickle(r"C:\Users\Mathias\PycharmProjects\Ratings\Files\_newall_game_all_team_rating")
+    df = df[df['start_date_time']>'2020-03-01']
+    df['round_difference'] =df['rounds_won']-df['rounds_lost']
+    df['rating_difference'] = df['time_weight_rating'] - df['opponent_time_weight_rating']
+    df['default_rating_difference'] = df['time_weight_default_rating'] - df['opponent_time_weight_default_rating']
+    ml_model = LogisticRegression()
+    X = df[['rating_difference', 'default_rating_difference']]
+    ml_model.fit(X, df['won'])
+    df['prob'] = ml_model.predict_proba(X)[:, 1]
+    model.insert_historical_over265_probs_and_mean_pred(df)
+    average_mean_error = abs(model.df['mean_rd_prediction'] - model.df['round_difference']).mean()
+    print(average_mean_error)
+
+    from MachineLearning.OrdinalClassifier import  OrdinalClassifier
+    from sklearn.multiclass import OneVsRestClassifier
+    ml_model = OrdinalClassifier(LogisticRegression())
+    ml_model.fit(X,model.df['round_difference'])
+    y_pred= ml_model.predict_proba(X)
+    estimated = np.sum(y_pred * ml_model.classes_, axis=1)
+
+    score = abs(model.df['round_difference'] - estimated).mean()
+    print(score)

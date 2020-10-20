@@ -78,11 +78,15 @@ def run_trueskill(newest_games_only=False,min_date="2015-07-01"):
 
     if len(new_game_player) > 0:
         env = trueskill.setup(sigma=sigma, beta=beta, tau=tau)
-        new_game_team,player_ratings,region_players,region_players_rating = create_game_player_trueskill(new_game_player, env, start_rating_quantile,
-                                                                                                         start_rating_regions=start_rating_regions,
-                                                                                                         player_ratings=player_ratings,
-                                                                                                         region_players_rating=region_players_rating,
-                                                                                                         region_players=region_players)
+        try:
+            new_game_team,player_ratings,region_players,region_players_rating = create_game_player_trueskill(new_game_player, env, start_rating_quantile,
+                                                                                                             start_rating_regions=start_rating_regions,
+                                                                                                             player_ratings=player_ratings,
+                                                                                                             region_players_rating=region_players_rating,
+                                                                                                             region_players=region_players)
+        except KeyError as e:
+            print(e)
+            return
         print(len(player_ratings))
         if newest_games_only:
             game_team = updated_game_team.append(new_game_team)
@@ -98,6 +102,7 @@ def run_trueskill(newest_games_only=False,min_date="2015-07-01"):
 
         with open(r'C:\Users\Mathias\PycharmProjects\Ratings/Files/region_players_rating', 'wb') as f:
             pickle.dump(region_players_rating, f, pickle.HIGHEST_PROTOCOL)
+        print("Inserted files")
 
     else:
         print("Ts no new games found")
@@ -106,4 +111,4 @@ def run_trueskill(newest_games_only=False,min_date="2015-07-01"):
 
 if __name__ == '__main__':
 
-    run_trueskill(newest_games_only=False)
+    run_trueskill(newest_games_only=False,min_date="2015-07-01")

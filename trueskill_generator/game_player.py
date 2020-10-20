@@ -50,6 +50,7 @@ def create_game_player_trueskill(df, env, start_rating_quantile, start_rating_re
 
             single_team_rows = single_rows[single_rows['team_id']==team_id]
             for index, row in single_team_rows.iterrows():
+
                 indexes.append(index)
                 player_id = row['player_id']
                 region = row['region']
@@ -75,6 +76,8 @@ def create_game_player_trueskill(df, env, start_rating_quantile, start_rating_re
                 single_game_player_ratings[team_number].append(player_ratings[player_id])
                 team_player_sigmas[team_number].append(    player_ratings[player_id].sigma)
                 team_player_mus[team_number].append(    player_ratings[player_id].mu)
+
+
 
 
             single_game_player_ratings[team_number] = tuple(single_game_player_ratings[team_number])
@@ -107,6 +110,7 @@ def create_game_player_trueskill(df, env, start_rating_quantile, start_rating_re
                 region_players_rating[region][ix] = player_ratings[player_id].mu
 
 
-    all_game_all_team = df.groupby(['game_id','team_id','start_date_time','game_number','won'])[['prob','sigma','mu','opponent_mu','opponent_sigma']].mean().reset_index()
+    all_game_all_team = df.groupby(['game_id','team_id','start_date_time','game_number'])[['prob','sigma','mu','opponent_mu','opponent_sigma','won']].mean().reset_index()
+
 
     return all_game_all_team, player_ratings, region_players, region_players_rating

@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def get_offline_dataframe(df):
     return df[df['is_offline']==1]
 

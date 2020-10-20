@@ -175,6 +175,7 @@ class SeriesPredictionGenerator():
                 player_id_to_player_name = self.get_player_ids_to_player_names(single_series_all_player)
                 team_player_names = self.create_team_player_names(team_player_ids, player_id_to_player_name)
                 sheet_name = str(team_names[0]) + '_' + str(team_names[1])
+
                 reverse_sheet_name = str(team_names[1]) + '_' + str(team_names[0])
 
                 if sheet_name not in existing_sheet_names and reverse_sheet_name in existing_sheet_names:
@@ -208,17 +209,32 @@ class SeriesPredictionGenerator():
                 trueskill_win_probability = get_trueskill_win_probability(trueskill_team_players[0],
                                                                           trueskill_team_players[1], beta=5)
 
-                win_probabilities, map_probs_dict = self.get_win_probability_regular_time(team_ratings,
+                win_probabilities, map_probs_dict,pick_ban_probabilities = self.get_win_probability_regular_time(team_ratings,
                                                                                           trueskill_win_probability,
                                                                                           team_default_ratings,
                                                                                           team_player_ids,
                                                                                           SingleGame.single_game_stored_player_values,
                                                                                           team_names)
 
-                rating_difference = (team_default_ratings[0]-team_default_ratings[1])*0.5+(team_ratings[0]-team_ratings[1])*0.5
-                series_win_probability = SeriesWinProbability( win_probabilities['0_all'],
-                format, rating_difference,)
-                series_win_probability.generate_series_probability()
+
+                rating_difference = (team_default_ratings[0] - team_default_ratings[1]) * 0.5 + (
+                            team_ratings[0] - team_ratings[1]) * 0.5
+
+                step = 0.03
+                min_win_probability = win_probabilities['0_all']-step*2
+                series_win_probabilities = {}
+
+                for wr in range(5):
+                    map_win_probability =round(min_win_probability  +wr *step,2)
+
+                    series_win= SeriesWinProbability( map_win_probability, format, rating_difference)
+                    series_win.generate_series_probability()
+                    series_win_probabilities[map_win_probability] = series_win
+
+
+                series_win_probability = series_win_probabilities[round(win_probabilities['0_all'],2)]
+
+
 
                 team_certain_ratios = self.calculcate_team_certain_ratio(team_player_ids,
                                                                          SingleGame.single_game_stored_player_values)
@@ -230,40 +246,28 @@ class SeriesPredictionGenerator():
                 mean_pred = 1785
                 difference = pred - mean_pred
                 uncertain_ratio = round(1 / (1 + 10 ** (-difference / 18)), 4)
-
                 map_probs_df = pd.DataFrame.from_dict(map_probs_dict)
-
 
                 print(team_names, win_probabilities)
 
-
-
                 historical_team_stats_dict= self.get_historical_team_stats_dict(  series_win_probability, team_ids,   team_names,   win_probabilities, team_player_ids)
+                historical_team_stats_dict['Team Stats'].append("Match Uncertain")
+                historical_team_stats_dict[team_names[0]].append(str(round(uncertain_ratio*100,0)) + "%")
+                historical_team_stats_dict[team_names[1]].append("")
                 historical_team_stats_df = pd.DataFrame.from_dict(historical_team_stats_dict)
 
 
-                index_perf = historical_team_stats_dict['Team Stats'].index("Recent Performance Rating")
-                index_perf_ago = historical_team_stats_dict['Team Stats'].index("Recent Days Ago")
+
                 self.schedule_dict['Date'].append(start_date_time)
                 self.schedule_dict['Team1'].append(team_names[0])
                 self.schedule_dict['Team2'].append(team_names[1])
                 self.schedule_dict['Win Probability1'].append(str(round(win_probabilities['0_all']*100,0)) + "%")
                 self.schedule_dict['Win Probability2'].append(str(round(win_probabilities['1_all']*100,0)) + "%")
                 self.schedule_dict['Series Win Probability1'].append(str(round(series_win_probability.series_win_probability * 100, 0)) + "%")
-                self.schedule_dict['Series Win Probability2'].append(str(round(series_win_probability.series_win_probability* 100, 0)) + "%")
-
-                #self.schedule_dict['Time Win Probability1'].append(str(round(win_probabilities['0_time'] * 100, 0)) + "%")
-                #self.schedule_dict['Time Win Probability2'].append(str(round(win_probabilities['1_time'] * 100, 0)) + "%")
+                self.schedule_dict['Series Win Probability2'].append(str(round((1-series_win_probability.series_win_probability)* 100, 0)) + "%")
 
                 self.schedule_dict['Match Uncertain Ratio'].append(str(round(uncertain_ratio*100,0)) + "%")
-               # self.schedule_dict['TS Win Probability1'].append(str(round(trueskill_win_probability * 100, 0)) + "%")
-               # self.schedule_dict['TS Win Probability2'].append(str(round((1-trueskill_win_probability) * 100, 0)) + "%")
-                #self.schedule_dict['Recent Performance Rating1'].append(historical_team_stats_dict[team_names[0]][index_perf])
-                #self.schedule_dict['Recent Performance Rating2'].append( historical_team_stats_dict[team_names[1]][index_perf])
-                #self.schedule_dict['Recent Days Ago1'].append(
-                #    historical_team_stats_dict[team_names[0]][index_perf_ago])
-                #self.schedule_dict['Recent Days Ago2'].append(
-                #    historical_team_stats_dict[team_names[1]][index_perf_ago])
+
                 self.schedule_dict['Tournament'].append(single_series_all_player['tournament_name'].iloc[0])
                 self.schedule_dict['Sheet Name'].append(sheet_name)
 
@@ -278,11 +282,18 @@ class SeriesPredictionGenerator():
                     clear_sheet(sheet_name, self.workbook_name)
                     append_df_to_sheet(map_probs_df, sheet_name, workbook_name=self.workbook_name, row_number=21,
                                        column_number=1)
-                    handicap_prob_df = self.generate_handicap_probabilities(series_win_probability,team_names)
+                    handicap_prob_df = self.generate_handicap_probabilities(series_win_probabilities,team_names)
+
+
 
 
 
                     append_df_to_sheet(handicap_prob_df,sheet_name,workbook_name=self.workbook_name,row_number=13,column_number=13)
+
+                    leftover_prob = sum(pick_ban_probabilities) / len(pick_ban_probabilities)
+                    if format =="bo3":
+                        givenmap1_probs_df = self.add_prob_given_map1(team_names,leftover_prob,win_probabilities,format,rating_difference,pick_ban_probabilities)
+                        append_df_to_sheet(givenmap1_probs_df,sheet_name,self.workbook_name,row_number=45,column_number=13)
 
                     if self.is_over_under_kill_series(start_date_time,team_ratings,single_series_all_player) is True:
 
@@ -340,6 +351,61 @@ class SeriesPredictionGenerator():
         append_df_to_sheet(pd.DataFrame.from_dict(self.schedule_dict), "Schedule", self.workbook_name)
 
 
+    def add_prob_given_map1(self,team_names,leftover_prob,win_probabilities,format,rating_difference,pick_ban_probabilities):
+        givenmap1_probs = {
+            'Map 1 pick': [],
+            team_names[0] + " Map1": [],
+            team_names[1] + " Map1": [],
+            'Map 2 ' + str(team_names[0]): [],
+            'Map 2 ' + str(team_names[1]): [],
+            'Series ' + str(team_names[0]): [],
+            'Series ' + str(team_names[1]): []
+        }
+
+        for round_difference in [-12, -7, -2, 2, 7, 12]:
+            if round_difference > 0:
+                rounds_won = 16
+                rounds_lost = 16 - round_difference
+            else:
+                rounds_won = 16 + round_difference
+                rounds_lost = 16
+
+            for pick in [0, 1]:
+                givenmap1_probs[team_names[0] + " Map1"].append(rounds_won)
+                givenmap1_probs[team_names[1] + " Map1"].append(rounds_lost)
+
+                sw_pick1 = SeriesWinProbability(win_probabilities['0_all'], format, rating_difference)
+                sw_pick1.generate_bo_3_from_map1(round_difference, pick_ban_probabilities[pick],
+                                                 pick_ban_probabilities[-pick + 1], leftover_prob,
+                                                 self.ml_models_dict['won_stacked'])
+
+                givenmap1_probs['Map 1 pick'].append(team_names[pick])
+
+                if round_difference > 0:
+                    map2_win_prob = sw_pick1.series_result_probability['2-0']
+
+
+                elif round_difference < 0:
+                    map2_win_prob = sw_pick1.series_result_probability['1-2'] + sw_pick1.series_result_probability[
+                        '2-1']
+
+                map2_prob_str = str(round(map2_win_prob * 100, 1)) + "%"
+                map2_prob_team_2str = str(round((1 - map2_win_prob) * 100, 1)) + "%"
+
+                givenmap1_probs['Map 2 ' + str(team_names[0])].append(map2_prob_str)
+                givenmap1_probs['Map 2 ' + str(team_names[1])].append(map2_prob_team_2str)
+
+                series_win_prob = sw_pick1.series_result_probability['2-0'] + sw_pick1.series_result_probability['2-1']
+                series_win_prob_str = str(round((series_win_prob) * 100, 1)) + "%"
+                series_win_prob_team2_str = str(round((1 - series_win_prob) * 100, 1)) + "%"
+                givenmap1_probs['Series ' + str(team_names[0])].append(series_win_prob_str)
+                givenmap1_probs['Series ' + str(team_names[1])].append(series_win_prob_team2_str)
+
+        givenmap1_probs_df = pd.DataFrame.from_dict(givenmap1_probs)
+        return givenmap1_probs_df
+
+
+
     def get_estimated_team_kills(self,scenario_df,team_ids):
         estimated_team_kills = []
         for team_id in team_ids:
@@ -352,21 +418,42 @@ class SeriesPredictionGenerator():
 
 
 
-    def generate_handicap_probabilities(self,series_win_probability,team_names):
-        handicap_probabilities_dict = {
-            'Handicap':[],
-            'Probability' + team_names[0]:[]
-        }
-        sorted_list = sorted(series_win_probability.round_win_probsmap1,reverse=False)
-        sum_prob = 0
-        for round_difference in sorted_list:
-            prob = series_win_probability.round_win_probsmap1[round_difference]
-            sum_prob +=prob
-            handicap = str(round_difference-0.5)
-            handicap_probabilities_dict['Handicap'].append(handicap)
-            handicap_probabilities_dict['Probability'+team_names[0]].append(str(round(sum_prob*100,0)) + "%")
+    def generate_handicap_probabilities(self,series_win_probabilities,team_names):
 
-        return pd.DataFrame.from_dict(handicap_probabilities_dict)
+        hc_column_name = 'Handicap ' + str(team_names[0])
+
+        handicap_probabilities_dict = {
+            hc_column_name:[],
+        }
+        number = -1
+        for map_win_probability,series_win_probability in series_win_probabilities.items():
+            number +=1
+
+
+            handicap_probabilities_dict[str(map_win_probability)] = []
+
+            sorted_list = sorted(series_win_probability.round_win_probsmap1,reverse=False)
+            sum_prob = 0
+            for round_difference in sorted_list:
+
+                prob = series_win_probability.round_win_probsmap1[round_difference]
+
+                handicap = str(-round_difference+0.5)
+                if float(handicap) > 0:
+                    handicap = "+" + handicap
+                if round_difference > -16:
+                    if number == 0:
+                        handicap_probabilities_dict[hc_column_name].append(handicap)
+
+                    handicap_probabilities_dict[str(map_win_probability)].append(str(round((1-sum_prob)*100,1)) + "%")
+
+
+                sum_prob += prob
+        try:
+            df =  pd.DataFrame.from_dict(handicap_probabilities_dict)
+        except:
+            h = 3
+        return df
 
     def create_map_kpr_df(self,player_id_to_player_name,team_players,single_game_stored_player_values,estimated_team_kills):
 
@@ -462,21 +549,21 @@ class SeriesPredictionGenerator():
 
 
         win_rate_dict = {
-            'Team Stats': ["Win Probability", "4 Month Win Rate", "4 Month Performance Rating", "12 Games Performance Rating","Recent Performance Rating","Recent Days Ago"],
-            team_names[0]: [win_probabilities['0_all'], win_rates_4_month[0],
+            'Team Stats': ["Series Win Probability","Map Win Probability", "4 Month Win Rate", "4 Month Performance Rating", "12 Games Performance Rating","Recent Days Ago"],
+            team_names[0]: [round(series_win_probability.series_win_probability,3),win_probabilities['0_all'], win_rates_4_month[0],
                             performance_rating_4_month[0],last_15_games_performance_rating[0],
-                            average_performance_rating_recents[0],recent_game_counts[0]],
-            team_names[1]: [win_probabilities['1_all'], win_rates_4_month[1],
-                            performance_rating_4_month[1],last_15_games_performance_rating[1],average_performance_rating_recents[1],recent_game_counts[1]],
+                            recent_game_counts[0]],
+            team_names[1]: [round(1-series_win_probability.series_win_probability,3),win_probabilities['1_all'], win_rates_4_month[1],
+                            performance_rating_4_month[1],last_15_games_performance_rating[1],recent_game_counts[1]],
 
         }
         if '2-0' in series_win_probability.series_result_probability:
             win_rate_dict['Team Stats'].append("2-0")
             win_rate_dict['Team Stats'].append("2-1")
-            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-0'] * 100, 0)) + "%")
-            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-1'] * 100, 0)) + "%")
-            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['0-2'] * 100, 0)) + "%")
-            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['1-2'] * 100, 0)) + "%")
+            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-0'] * 100, 1)) + "%")
+            win_rate_dict[team_names[0]].append(str(round(series_win_probability.series_result_probability['2-1'] * 100, 1)) + "%")
+            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['0-2'] * 100, 1)) + "%")
+            win_rate_dict[team_names[1]].append(str(round(series_win_probability.series_result_probability['1-2'] * 100, 1)) + "%")
 
 
         return  win_rate_dict
@@ -621,7 +708,8 @@ class SeriesPredictionGenerator():
             team_names[0] + ' Leftover': [],
             team_names[1] + ' Leftover': [],
         }
-
+        map_prob_pickeds = []
+        map_prob_opp_pickeds = []
         for map in ACTIVE_MAPS:
             team_ratings = {}
             number = -1
@@ -644,6 +732,10 @@ class SeriesPredictionGenerator():
             map_prob_opp_picked = self.ml_models_dict['won_pick_map_stacked'].predict_proba(
                 [[rating_difference, default_rating_difference,trueskill_win_probability, map_rating_difference,0]])[0][1]
 
+            map_prob_pickeds.append(map_prob_picked)
+            map_prob_opp_pickeds.append(map_prob_opp_picked)
+
+
             map_prob_leftover = self.ml_models_dict['won_pick_map_stacked'].predict_proba(
                 [[rating_difference, default_rating_difference,trueskill_win_probability, map_rating_difference,1]])[0][1]
 
@@ -663,7 +755,10 @@ class SeriesPredictionGenerator():
             map_probs_dict[team_names[0] +' Leftover'].append(map_prob_picked_str0left)
             map_probs_dict[team_names[1] + ' Leftover'].append(map_prob_picked_str1left)
 
-        return win_probabilities,map_probs_dict
+
+        map_picks = [sum(map_prob_pickeds)/len(map_prob_pickeds),sum(map_prob_opp_pickeds)/len(map_prob_opp_pickeds)]
+
+        return win_probabilities,map_probs_dict,map_picks
 
 
     def convert_feature_dict_to_df(self,feature_dict):
